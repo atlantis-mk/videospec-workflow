@@ -1,0 +1,30 @@
+{
+  "templateVersion": 2,
+  "projectFiles": {
+    "project.md": "project.md",
+    "specs/content/spec.md": "../v1/specs/content.md",
+    "specs/creative/spec.md": "../v1/specs/creative.md",
+    "specs/visual/spec.md": "../v1/specs/visual.md",
+    "specs/audio/spec.md": "../v1/specs/audio.md",
+    "specs/delivery/spec.md": "../v1/specs/delivery.md"
+  },
+  "productionFiles": {
+    "proposal.md": "production/proposal.md",
+    "brief.md": "production/brief.md",
+    "script.md": "production/script.md",
+    "storyboard.md": "production/storyboard.md",
+    "materials.md": "production/materials.md",
+    "tasks.md": "production/tasks.md",
+    "review.md": "production/review.md",
+    "deliverables.json": "../v1/production/deliverables.json",
+    "specs/README.md": "../v1/production/standards-delta.md",
+    "renders/.gitkeep": "../v1/production/empty"
+  },
+  "variables": [
+    "production.id",
+    "production.title",
+    "production.type",
+    "production.duration",
+    "production.aspectRatio"
+  ]
+}

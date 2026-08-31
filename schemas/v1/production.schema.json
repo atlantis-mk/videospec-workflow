@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://videospec.dev/schemas/v1/production.schema.json",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "templateVersion",
+    "id",
+    "title",
+    "type",
+    "duration",
+    "aspectRatio",
+    "approvals"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "templateVersion": { "const": 1 },
+    "id": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+    "title": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1 },
+    "duration": { "type": "string", "minLength": 1 },
+    "aspectRatio": { "type": "string", "minLength": 1 },
+    "approvals": {
+      "type": "object",
+      "required": ["brief", "storyboard", "final"]
+    }
+  }
+}

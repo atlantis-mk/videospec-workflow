@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Explore"
+  short_description: "Select one researched, proposal-ready video direction"
+  default_prompt: "Use $videospec-explore to determine the goal, research the topic, and select one final video direction."

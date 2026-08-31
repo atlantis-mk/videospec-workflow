@@ -1,0 +1,40 @@
+{
+  "templateVersion": 2,
+  "artifacts": {
+    "proposal.md": {
+      "template": "videospec/proposal",
+      "requiredHeadings": ["## Why this video", "## Audience and platform", "## Outcome", "## Scope", "### In", "### Out", "## Success signals", "## Risks and open questions"],
+      "allowedHeadingPatterns": ["^# Proposal: .+$"]
+    },
+    "brief.md": {
+      "template": "videospec/brief",
+      "requiredHeadings": ["## One-sentence message", "## Format", "## Tone and references", "## Must include", "## Must avoid", "## Call to action"],
+      "allowedHeadingPatterns": ["^# Creative brief: .+$"]
+    },
+    "script.md": {
+      "template": "videospec/script",
+      "requiredHeadings": ["## Summary", "## TTS configuration", "## Voice profile"],
+      "allowedHeadingPatterns": ["^# Script: .+$", "^## [0-9]{2,}:[0-9]{2}[–-][0-9]{2,}:[0-9]{2}｜.+$"]
+    },
+    "storyboard.md": {
+      "template": "videospec/storyboard",
+      "requiredHeadings": ["## Scenes"],
+      "allowedHeadingPatterns": ["^# Storyboard: .+$", "^### Scene S[0-9]{3}$", "^#### (Visual composition|Motion and transition|Audio|Acceptance check)$"]
+    },
+    "materials.md": {
+      "template": "videospec/materials",
+      "requiredHeadings": ["## Assets"],
+      "allowedHeadingPatterns": ["^# Materials plan: .+$", "^### Asset MAT-[0-9]{3}$", "^#### Intended use$"]
+    },
+    "tasks.md": {
+      "template": "videospec/tasks",
+      "requiredHeadings": ["## Plan", "## Materials", "## Build", "## Quality control"],
+      "allowedHeadingPatterns": ["^# Production tasks: .+$"]
+    },
+    "review.md": {
+      "template": "videospec/review",
+      "requiredHeadings": ["## Review version", "## Automated checks", "## Narration review", "## Findings and resolutions", "## Human final checklist"],
+      "allowedHeadingPatterns": ["^# Review: .+$"]
+    }
+  }
+}

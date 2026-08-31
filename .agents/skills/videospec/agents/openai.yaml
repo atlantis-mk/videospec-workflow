@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec"
+  short_description: "Route specification-driven video production work"
+  default_prompt: "Use $videospec to inspect this video project and choose the correct next workflow."

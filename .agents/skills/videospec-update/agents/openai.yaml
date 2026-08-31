@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Update"
+  short_description: "Revise video artifacts and keep them coherent"
+  default_prompt: "Use $videospec-update to revise the active production while preserving traceability."

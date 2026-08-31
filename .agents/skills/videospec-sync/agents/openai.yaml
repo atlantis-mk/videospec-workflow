@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Sync"
+  short_description: "Merge durable production standards into project truth"
+  default_prompt: "Use $videospec-sync to review and merge this production standards delta."

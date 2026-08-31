@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Propose"
+  short_description: "Create an AI-drafted video production proposal"
+  default_prompt: "Use $videospec-propose to create a review-ready production plan for this video."

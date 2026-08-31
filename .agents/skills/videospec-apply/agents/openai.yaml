@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Apply"
+  short_description: "Produce an approved video plan with the right tools"
+  default_prompt: "Use $videospec-apply to continue producing the active approved video."

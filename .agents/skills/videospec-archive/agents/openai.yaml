@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Archive"
+  short_description: "Validate and archive a completed video production"
+  default_prompt: "Use $videospec-archive to validate and archive the completed production."

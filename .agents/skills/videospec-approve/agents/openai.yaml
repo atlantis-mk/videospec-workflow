@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Approve"
+  short_description: "Record an explicit human video approval gate"
+  default_prompt: "Use $videospec-approve to record my explicit approval for the active production gate."

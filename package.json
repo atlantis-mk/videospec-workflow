@@ -1,0 +1,38 @@
+{
+  "name": "videospec-workflow",
+  "version": "0.4.5",
+  "description": "An OpenSpec-inspired, specification-driven workflow for AI-assisted video production.",
+  "type": "module",
+  "files": [
+    ".agents/skills/**",
+    "bin/**",
+    "src/**",
+    "templates/**",
+    "schemas/**",
+    "README.md",
+    "LICENSE"
+  ],
+  "bin": {
+    "videospec": "bin/videospec.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/cli.js && node --check src/core.js && node --test",
+    "prepublishOnly": "npm run check"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "ai",
+    "video",
+    "workflow",
+    "specification",
+    "codex",
+    "hyperframes"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

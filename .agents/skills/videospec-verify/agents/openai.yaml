@@ -1,0 +1,4 @@
+interface:
+  display_name: "VideoSpec Verify"
+  short_description: "Review a rendered video against its approved plan"
+  default_prompt: "Use $videospec-verify to inspect and verify the active video production."
