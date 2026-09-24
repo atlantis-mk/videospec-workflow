@@ -1,0 +1,6 @@
+interface:
+  display_name: "视频脚本严审"
+  short_description: "按时长严格审查视频脚本的留存、逻辑与口播质量"
+  default_prompt: "使用 $video-script-review 按目标时长严格审查以下视频脚本：只审稿、不重写，定位问题、严格评分并给出结论。"
+policy:
+  allow_implicit_invocation: true

@@ -1,18 +1,18 @@
 ---
 name: videospec-approve
-description: Record an explicit human approval for a VideoSpec brief, storyboard/materials package, or final video. Use only when the user clearly asks to approve, sign off, accept, or confirm a named production gate; never invoke implicitly merely because artifacts look complete.
+description: Record explicit human content, final-video, or publication approval for a VideoSpec production.
 ---
 
 # Record human approval
 
-Treat invocation as a request to record a human decision, not to make the decision for them.
+Only record a decision the user explicitly makes. Read the context ledger, status, and the files protected by the requested gate.
 
-1. Identify the production and gate: `brief`, `storyboard`, or `final`.
-2. Run `node videospec/bin/videospec.js lint <id> --json` and `node videospec/bin/videospec.js status <id> --json`. Structural lint errors block approval; show the user any warnings, incomplete scope, or stale scope before recording approval.
-3. For `brief`, ensure the user explicitly accepts `proposal.md` and `brief.md`.
-4. For `storyboard`, ensure the user explicitly accepts `script.md`, `storyboard.md`, and `materials.md`, including unresolved rights or evidence risks.
-5. For `final`, require the user's explicit confirmation that they reviewed facts/claims, rights/privacy/attribution, brand/editorial intent, picture, audio, captions, and delivery. If the checklist in `review.md` is unchecked, update it only from that explicit confirmation.
-6. Use the provided approver name; otherwise record `User`. Run `node videospec/bin/videospec.js approve <id> <gate> --by <name>`.
-7. Report the gate, approver, timestamp, and files whose hashes were signed.
+1. For `content`, require acceptance of v6 `context.md`, `brief.md`, `evidence.md`, `script.md`, and `content-review.md` (use the recorded older artifact layout for legacy productions); confirm the reference mode, coverage/omissions, and rights boundary where a reference is used.
+2. For `final`, require acceptance of the rendered deliverable, storyboard/materials, automated review, the prepared `publish.md` package, and the human final checklist questions. The explicit final approval record is the sign-off; do not mark those questions as agent-completed checks. Present the title, three native-ratio covers, and one-sentence viewer promise alongside the master; this avoids a separate manual packaging pass after approval.
+3. For `publish`, require acceptance of `publish.md`: selected title, separately composed 16:9, 4:3, and 3:4 cover assets generated with `$imagegen` and stored in the production, description, metadata, settings, exactly ten distinct search-relevant tags, and the final deliverable. Approval authorizes publication; it does not pretend publication has happened.
+4. Run `node videospec/bin/videospec.js lint <id> --json` and status, disclose warnings or stale approvals, then run `node videospec/bin/videospec.js approve <id> <content|final|publish> --by <name>`.
+5. Report the approver, timestamp, and signed file hashes. Never infer approval from completed AI work.
 
-Do not approve from inference, technical QA, previous conversation ambiguity, or another skill's completion. If the user has not explicitly approved, stop and request confirmation.
+## v6 artifact authority
+
+For templateVersion 6, the content gate protects `context.md`, `brief.md`, `evidence.md`, `script.md`, and `content-review.md`; `activity.md` records later operational work without invalidating content approval. The final gate protects `storyboard.md`, `materials.md`, `tasks.md`, `review.md`, `publish.md`, `deliverables.json`, and the three cover files; the publication gate protects `publish.md`, `deliverables.json`, and the three cover files. `learning.md` is post-publication and is not a pre-publication approval artifact.

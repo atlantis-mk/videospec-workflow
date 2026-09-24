@@ -1,19 +1,11 @@
 ---
 name: videospec-verify
-description: Verify a VideoSpec production or rendered video against approved intent, script, storyboard, materials, durable standards, and delivery requirements. Use for review, QA, diagnostics, render inspection, acceptance checks, or determining whether a video is ready for final human approval.
+description: Perform automated QA while retaining immutable before/after versions of review findings.
 ---
 
 # Verify a production
 
-1. Read the durable specs, production artifacts, approval state, deliverables manifest, and registered files.
-2. Confirm the registered file exists and its hash still matches. Register an untracked review render only when the user placed it in scope.
-3. Inspect representative frames and critical transitions. Check scene order, timing, safe areas, typography, captions, visual consistency, and storyboard acceptance checks.
-4. When timed captions or narration-to-caption references are present, compare them against the final rendered timeline yourself. Verify every related semantic effect, label, card, illustrative image, or footage has a storyboard mapping, begins at or after the matching content starts, and does not persist into unrelated content. Record the result, any mismatch, and its resolution in `review.md` under `Automated checks` or `Findings and resolutions`.
-5. Inspect audio for speech intelligibility, masking, sync, clipping, and expected duration when audio tooling is available.
-6. Compare narration performance with the global and per-scene performance direction. Check `context_texts`, speech rate, loudness, trailing silence, pitch, pronunciation, pacing, pauses, and whether provider-side substitutions changed meaning.
-7. For a HyperFrames project, invoke `$hyperframes` and run its required lint/check/snapshot or render diagnostics. Do not substitute generic checks for its workflow.
-8. Compare factual claims and asset use with `script.md` and `materials.md`; flag unresolved evidence, rights, privacy, or attribution instead of guessing.
-9. Update only the machine/technical findings and resolutions in `review.md`. Do not tick the human final checklist.
-10. Run `node videospec/bin/videospec.js lint <id> --json` and `node videospec/bin/videospec.js validate <id> --json`. Explain template errors/warnings, automated QA findings, missing human items, and whether the deliverable is unchanged as separate results.
-
-Never turn a successful technical check into human final approval.
+1. Read the current production's context and history, approved content, storyboard, materials, review, and deliverables.
+2. Snapshot `before:` updating QA records. Inspect subtitle timing/readability, sync, black frames, clipping/silence, pacing, facts, sources, rights, visual mapping, and the prepared publication package. Confirm the selected title, cover copy, description, and platform draft make the same viewer promise as the actual render and do not introduce a new unsupported claim. Then conduct an audience-critic pass on the actual render: cite likely exit points by timecode, repeated visual grammar, narration-to-screen duplication, flat emotional stretches, unsupported pattern interrupts, and open loops or promises that never pay off. This is an editorial hypothesis, not platform analytics.
+3. Record reproducible technical findings plus the time-coded audience-critic findings and smallest safe resolutions in `review.md`; do not tick human checklist items or claim approval.
+4. For a fixable QA finding, automatically update the earliest affected production artifact, rebuild or re-render, and repeat QA. Allow at most two repair/recheck attempts for the same finding and three repair/recheck rounds in one QA run; stop earlier if the same failure repeats without progress. Preserve snapshots and the before/after rationale for every revision. If the fix changes an approved content artifact, do not conceal the stale approval: return to the human content gate. When the retry limit is reached, record the finding, attempted repairs, last observed result, and remaining risk in `review.md` and v6 `activity.md` (legacy `context.md`). A reviewable render with non-blocking exceptions may proceed to the human final-video decision with those exceptions disclosed; a missing render or a failed essential technical/rights check remains blocked and must not be presented as ready for approval. After QA, snapshot `after:` the review update; if recording the returned ID changes the log, take a final snapshot. Run lint and status, and present one decision brief with the review render when available, QA exceptions, selected title/covers, and default recommendation. Full archive validation runs after final and publication approval. Do not ask the user to separately inspect or approve production sub-steps.

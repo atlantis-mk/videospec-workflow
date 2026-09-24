@@ -9,7 +9,7 @@ productionId: {{production.id}}
 ## Summary
 
 - Target duration: {{production.duration}}
-- Estimated narration: <!-- TODO -->
+- Narration timing: Planned; recalibrate from the real generated voice master before video assembly. Once TTS starts, changing timing never permits changing **口播：** text or scene order.
 - Language: zh-CN
 
 ## TTS configuration
@@ -47,7 +47,8 @@ productionId: {{production.id}}
 
 **合成参数：**
 
-> speech_rate: 0
+> <!-- speech_rate baseline: 15. Vary above or below it per scene only for story, emotion, information density, or comprehension. -->
+> speech_rate: 15
 > loudness_rate: 0
 > silence_duration_ms: 0
 > post_process_pitch: 0

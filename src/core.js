@@ -4,14 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const ROOT_DIR = "videospec";
-export const GATES = ["brief", "storyboard", "final"];
-export const VERSION = "0.4.5";
-export const TEMPLATE_VERSION = 2;
+export const GATES = ["content", "final", "publish"];
+export const VERSION = "0.7.3";
+export const TEMPLATE_VERSION = 6;
 export const VIDEO_SPEC_SKILLS = [
+  "video-script-review",
   "videospec",
   "videospec-apply",
   "videospec-approve",
-  "videospec-archive",
   "videospec-explore",
   "videospec-propose",
   "videospec-sync",
@@ -19,9 +19,11 @@ export const VIDEO_SPEC_SKILLS = [
   "videospec-verify",
 ];
 
+const TTS_SECRET_RELATIVE_PATH = path.join(".secrets", "tts.env");
+
 const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-const ARTIFACTS = {
+const LEGACY_ARTIFACTS = {
   proposal: "proposal.md",
   brief: "brief.md",
   script: "script.md",
@@ -31,11 +33,110 @@ const ARTIFACTS = {
   review: "review.md",
 };
 
-const GATE_FILES = {
+const V3_ARTIFACTS = {
+  context: "context.md",
+  topic: "topic.md",
+  research: "research.md",
+  script: "script.md",
+  contentReview: "content-review.md",
+  storyboard: "storyboard.md",
+  materials: "materials.md",
+  tasks: "tasks.md",
+  review: "review.md",
+  publish: "publish.md",
+  analytics: "analytics.md",
+  retrospective: "retrospective.md",
+};
+
+const V4_ARTIFACTS = {
+  context: "context.md",
+  topic: "topic.md",
+  referenceAnalysis: "reference-analysis.md",
+  research: "research.md",
+  script: "script.md",
+  contentReview: "content-review.md",
+  storyboard: "storyboard.md",
+  materials: "materials.md",
+  tasks: "tasks.md",
+  review: "review.md",
+  publish: "publish.md",
+  analytics: "analytics.md",
+  retrospective: "retrospective.md",
+};
+
+const V5_ARTIFACTS = {
+  ...V4_ARTIFACTS,
+  retentionPlan: "retention-plan.md",
+};
+
+const V6_ARTIFACTS = {
+  context: "context.md",
+  brief: "brief.md",
+  evidence: "evidence.md",
+  script: "script.md",
+  contentReview: "content-review.md",
+  storyboard: "storyboard.md",
+  materials: "materials.md",
+  tasks: "tasks.md",
+  review: "review.md",
+  publish: "publish.md",
+  learning: "learning.md",
+};
+
+const LEGACY_GATES = ["brief", "storyboard", "final"];
+const LEGACY_GATE_FILES = {
   brief: ["proposal.md", "brief.md"],
   storyboard: ["script.md", "storyboard.md", "materials.md"],
   final: ["tasks.md", "review.md", "deliverables.json"],
 };
+
+const V3_GATE_FILES = {
+  content: ["context.md", "topic.md", "research.md", "script.md", "content-review.md"],
+  final: ["storyboard.md", "materials.md", "tasks.md", "review.md", "deliverables.json"],
+  publish: ["publish.md"],
+};
+
+const V4_GATE_FILES = {
+  content: ["context.md", "topic.md", "reference-analysis.md", "research.md", "script.md", "content-review.md"],
+  final: V3_GATE_FILES.final,
+  publish: V3_GATE_FILES.publish,
+};
+
+const V5_GATE_FILES = {
+  content: ["context.md", "topic.md", "reference-analysis.md", "retention-plan.md", "research.md", "script.md", "content-review.md"],
+  final: [...V3_GATE_FILES.final, "publish.md"],
+  publish: V3_GATE_FILES.publish,
+};
+
+const V6_COVERS = ["assets/covers/cover-16x9.png", "assets/covers/cover-4x3.png", "assets/covers/cover-3x4.png"];
+
+const V6_GATE_FILES = {
+  content: ["context.md", "brief.md", "evidence.md", "script.md", "content-review.md"],
+  final: ["storyboard.md", "materials.md", "tasks.md", "review.md", "publish.md", "deliverables.json", ...V6_COVERS],
+  publish: ["publish.md", "deliverables.json", ...V6_COVERS],
+};
+
+function artifactsFor(metadata) {
+  if (metadata.templateVersion >= 6) return V6_ARTIFACTS;
+  if (metadata.templateVersion >= 5) return V5_ARTIFACTS;
+  if (metadata.templateVersion >= 4) return V4_ARTIFACTS;
+  return metadata.templateVersion >= 3 ? V3_ARTIFACTS : LEGACY_ARTIFACTS;
+}
+
+function gatesFor(metadata) {
+  return metadata.templateVersion >= 3 ? GATES : LEGACY_GATES;
+}
+
+function gateFilesFor(metadata, gate) {
+  const files = metadata.templateVersion >= 6
+    ? V6_GATE_FILES
+    : metadata.templateVersion >= 5
+    ? V5_GATE_FILES
+    : metadata.templateVersion >= 4
+    ? V4_GATE_FILES
+    : metadata.templateVersion >= 3 ? V3_GATE_FILES : LEGACY_GATE_FILES;
+  return files[gate];
+}
 
 function now() {
   return new Date().toISOString();
@@ -149,13 +250,17 @@ function templateFiles(group, context = {}, version = TEMPLATE_VERSION) {
     const file = path.join(templateRoot(version), source);
     if (!fs.existsSync(file)) throw new Error(`Template file is missing: ${file}`);
     const content = fs.readFileSync(file, "utf8");
-    return [destination, renderTemplate(content, context, manifest.variables)];
+    const rendered = renderTemplate(content, context, manifest.variables);
+    return [destination, destination.endsWith(".md")
+      ? rendered.replace(/^templateVersion:\s*\d+\s*$/m, `templateVersion: ${version}`)
+      : rendered];
   }));
 }
 
-export function initProject(target = ".") {
+export function initProject(target = ".", { ttsKey } = {}) {
   const projectRoot = path.resolve(target);
   const root = path.join(projectRoot, ROOT_DIR);
+  sourceSkillNames();
   if (fs.existsSync(path.join(root, "config.json"))) {
     return { ...updateProject(projectRoot), initialized: false };
   }
@@ -171,13 +276,14 @@ export function initProject(target = ".") {
       humanGates: GATES,
       createdAt: now(),
     }, null, 2)}\n`,
-    "AGENTS.md": agentInstructions(),
+    "AGENTS.md": reviewHistoryAgentInstructions(),
     ...templateFiles("projectFiles"),
   };
 
   for (const [relative, content] of Object.entries(files)) {
     writeNew(path.join(root, relative), content);
   }
+  if (ttsKey) saveTtsCredential(projectRoot, ttsKey);
   writeNew(path.join(projectRoot, "productions", "archive", ".gitkeep"), "");
   const agentLayer = installAgentLayer(projectRoot);
   return { projectRoot, root, agentLayer, initialized: true };
@@ -188,7 +294,9 @@ function sourceSkillsDir() {
 }
 
 function sourceSkillNames() {
-  return VIDEO_SPEC_SKILLS.filter((name) => fs.existsSync(path.join(sourceSkillsDir(), name, "SKILL.md")));
+  const missing = VIDEO_SPEC_SKILLS.filter((name) => !fs.existsSync(path.join(sourceSkillsDir(), name, "SKILL.md")));
+  if (missing.length) throw new Error(`VideoSpec package is missing required skills: ${missing.join(", ")}.`);
+  return VIDEO_SPEC_SKILLS;
 }
 
 function assertSkillTargetsAvailable(projectRoot) {
@@ -210,7 +318,7 @@ function installAgentLayer(projectRoot, { replace = false } = {}) {
     if (!fs.existsSync(source)) throw new Error(`VideoSpec runtime source is missing: ${source}`);
     fs.copyFileSync(source, path.join(runtime, name));
   }
-  for (const name of ["templates", "schemas"]) {
+  for (const name of ["templates", "schemas", "scripts"]) {
     const source = path.join(PACKAGE_ROOT, name);
     if (!fs.existsSync(source)) throw new Error(`VideoSpec ${name} source is missing: ${source}`);
     const destination = path.join(root, name);
@@ -225,21 +333,59 @@ function installAgentLayer(projectRoot, { replace = false } = {}) {
 
   const source = sourceSkillsDir();
   const target = path.join(projectRoot, ".agents", "skills");
+  const retiredSkills = [];
   if (path.resolve(source) !== path.resolve(target)) {
     for (const name of sourceSkillNames()) {
       const destination = path.join(target, name);
       if (replace && fs.existsSync(destination)) fs.rmSync(destination, { recursive: true });
       fs.cpSync(path.join(source, name), destination, { recursive: true, errorOnExist: true });
     }
+    if (replace) {
+      const retired = path.join(target, "videospec-archive");
+      if (fs.existsSync(retired)) {
+        const backups = path.join(root, "retired-skills");
+        fs.mkdirSync(backups, { recursive: true });
+        let destination = path.join(backups, "videospec-archive");
+        for (let suffix = 1; fs.existsSync(destination); suffix += 1) {
+          destination = path.join(backups, `videospec-archive-${suffix}`);
+        }
+        fs.renameSync(retired, destination);
+        retiredSkills.push(path.relative(projectRoot, destination));
+      }
+    }
   }
   return {
     runtime: path.relative(projectRoot, launcher),
     skills: sourceSkillNames(),
+    retiredSkills,
   };
+}
+
+export function saveTtsCredential(projectRoot, key) {
+  const value = key?.trim();
+  if (!value) throw new Error("TTS API key is required.");
+  if (/[\r\n]/.test(value)) throw new Error("TTS API key must be a single line.");
+  const secretDir = path.join(projectRoot, ROOT_DIR, ".secrets");
+  fs.mkdirSync(secretDir, { recursive: true, mode: 0o700 });
+  fs.chmodSync(secretDir, 0o700);
+  const ignoreFile = path.join(secretDir, ".gitignore");
+  if (!fs.existsSync(ignoreFile)) writeNew(ignoreFile, "*\n!.gitignore\n");
+  const credentialFile = path.join(secretDir, "tts.env");
+  write(credentialFile, `VOLCENGINE_TTS_API_KEY=${value}\n`);
+  fs.chmodSync(credentialFile, 0o600);
+  const configFile = path.join(projectRoot, ROOT_DIR, "config.json");
+  const config = readJson(configFile);
+  config.tts = {
+    provider: "volcengine-seed-tts-2.0",
+    credentialFile: TTS_SECRET_RELATIVE_PATH,
+  };
+  writeJson(configFile, config);
+  return { credentialFile: path.relative(projectRoot, credentialFile), provider: config.tts.provider };
 }
 
 export function updateProject(target = ".") {
   const projectRoot = findProject(target);
+  sourceSkillNames();
   const configFile = path.join(projectRoot, ROOT_DIR, "config.json");
   const config = readJson(configFile);
   const migration = migrateLegacyProductionRoot(projectRoot, config);
@@ -248,7 +394,23 @@ export function updateProject(target = ".") {
   config.updatedAt = now();
   writeJson(configFile, config);
   const agentLayer = installAgentLayer(projectRoot, { replace: true });
-  return { projectRoot, root: path.join(projectRoot, ROOT_DIR), agentLayer, version: VERSION, migration };
+  const activityLedgers = ensureV6ActivityLedgers(projectRoot);
+  return { projectRoot, root: path.join(projectRoot, ROOT_DIR), agentLayer, version: VERSION, migration, activityLedgers };
+}
+
+function ensureV6ActivityLedgers(projectRoot) {
+  const created = [];
+  for (const metadata of listProductions(projectRoot)) {
+    if (metadata.templateVersion !== 6 || !metadata.id) continue;
+    const file = path.join(productionDir(projectRoot, metadata.id), "activity.md");
+    if (fs.existsSync(file)) continue;
+    const content = templateFiles("productionFiles", { production: metadata }, 6)["activity.md"]
+      .replace("- V000: Initial production scaffold.", "- Runtime update: Ledger created; earlier changes remain in context.md and history/index.json.");
+    writeNew(file, content);
+    snapshotProduction(projectRoot, metadata.id, "after: add operational activity ledger during runtime update");
+    created.push(metadata.id);
+  }
+  return created;
 }
 
 function migrateLegacyProductionRoot(projectRoot, config) {
@@ -329,6 +491,8 @@ export function doctorProject(target = ".") {
     path.join(projectRoot, ROOT_DIR, "bin", "videospec.js"),
     path.join(projectRoot, ROOT_DIR, "templates", `v${TEMPLATE_VERSION}`, "manifest.json"),
     path.join(projectRoot, ROOT_DIR, "schemas", `v${TEMPLATE_VERSION}`, "artifacts.json"),
+    path.join(projectRoot, ROOT_DIR, "scripts", "generate_voice.py"),
+    path.join(projectRoot, ROOT_DIR, "scripts", "export_subtitles.py"),
   ];
   const missingRuntime = runtimeFiles.filter((file) => !fs.existsSync(file));
   checks.push(diagnostic(
@@ -364,6 +528,7 @@ export function createProduction(projectRoot, id, options = {}) {
   const metadata = {
     schemaVersion: 1,
     templateVersion: TEMPLATE_VERSION,
+    ...(TEMPLATE_VERSION >= 6 ? { artifactContractVersion: 2 } : {}),
     id,
     title: options.title || id,
     type: options.type || "general-video",
@@ -371,7 +536,7 @@ export function createProduction(projectRoot, id, options = {}) {
     aspectRatio: options.aspect || "16:9",
     createdAt: now(),
     updatedAt: now(),
-    approvals: { brief: null, storyboard: null, final: null },
+    approvals: Object.fromEntries(GATES.map((gate) => [gate, null])),
     syncedAt: null,
     standardsSync: null,
     archivedAt: null,
@@ -382,6 +547,7 @@ export function createProduction(projectRoot, id, options = {}) {
     writeNew(path.join(dir, relative), content);
   }
   writeJson(path.join(dir, "production.json"), metadata);
+  snapshotProduction(projectRoot, id, "Initial production scaffold");
   return { dir, metadata };
 }
 
@@ -389,16 +555,89 @@ function productionTemplates(meta) {
   return templateFiles("productionFiles", { production: meta }, meta.templateVersion);
 }
 
-function agentInstructions() {
-  return `# VideoSpec agent instructions\n\nVideoSpec is the agreement layer for this video project. Treat \`videospec/specs/\` as durable production truth and each folder under the relative \`productionRoot\` configured in \`videospec/config.json\` as one reviewable unit of work.\n\n## Working model\n\n- Explore before creating artifacts when intent is unclear.\n- Keep the production proposal focused on one deliverable.\n- Use upstream artifacts as context; revise them when learning changes the plan.\n- Preserve artifact YAML frontmatter, fixed headings, heading order, field names, and sequential \`S001\` / \`MAT-001\` identifiers.\n- In template v2 scripts, keep time-coded scene headings, blockquote spoken text under \`**口播：**\`, keep Volcengine synthesis parameters numeric and in range, and send natural-language performance guidance through \`additions.context_texts\` only for Seed TTS 2.0 preset voices.\n- Use \`None\`, \`Unresolved\`, or \`Unassigned\` instead of deleting a fixed field.\n- Run \`node videospec/bin/videospec.js lint <id> --json\` after creating or editing artifacts and fix structural errors before approval.\n- Do not invent factual sources, rights clearance, human approvals, or review results.\n- AI may draft and implement. Humans own the brief, storyboard/materials, and final approval gates.\n- A changed approved artifact makes its approval stale; ask for renewed approval.\n- For HyperFrames builds, translate the approved storyboard into seek-safe composition timing, validate the project, and register rendered files with \`videospec deliver\`.\n\n## Artifact flow\n\nproposal → brief → script → storyboard + materials → tasks → render → review → final approval → archive\n\nDependencies enable work; they do not prevent iteration. Human approvals are explicit release controls.\n`;
+function snapshotFiles(metadata) {
+  return [
+    "production.json",
+    ...Object.values(artifactsFor(metadata)),
+    ...(metadata.templateVersion >= 6 ? ["activity.md"] : []),
+    ...(metadata.templateVersion >= 6 ? V6_COVERS : []),
+    "deliverables.json",
+    ...(metadata.templateVersion >= 3 ? ["publication.json"] : []),
+  ];
+}
+
+function nextSnapshotId(historyDir) {
+  if (!fs.existsSync(historyDir)) return "V000";
+  const versions = fs.readdirSync(historyDir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory() && /^V\d{3}$/.test(entry.name))
+    .map((entry) => Number(entry.name.slice(1)));
+  return `V${String(versions.length ? Math.max(...versions) + 1 : 0).padStart(3, "0")}`;
+}
+
+export function snapshotProduction(projectRoot, id, note) {
+  const production = loadProduction(projectRoot, id);
+  if (!note?.trim()) throw new Error("Snapshot note is required. Pass `--note <what changed or why>`. ");
+  const historyDir = path.join(production.dir, "history");
+  const version = nextSnapshotId(historyDir);
+  const destination = path.join(historyDir, version);
+  fs.mkdirSync(destination, { recursive: true });
+  const hashes = {};
+  for (const relative of snapshotFiles(production.metadata)) {
+    const source = path.join(production.dir, relative);
+    if (!fs.existsSync(source)) continue;
+    const target = path.join(destination, relative);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.copyFileSync(source, target);
+    hashes[relative] = fileHash(source);
+  }
+  const specs = path.join(production.dir, "specs");
+  if (fs.existsSync(specs)) fs.cpSync(specs, path.join(destination, "specs"), { recursive: true });
+  const indexFile = path.join(historyDir, "index.json");
+  const index = fs.existsSync(indexFile) ? readJson(indexFile) : { schemaVersion: 1, snapshots: [] };
+  index.snapshots.push({ version, at: now(), note: note.trim(), hashes });
+  writeJson(indexFile, index);
+  return { version, path: destination, note: note.trim(), hashes };
+}
+
+function reviewHistoryAgentInstructions() {
+  return `# VideoSpec agent instructions
+
+VideoSpec is the agreement layer for this video project.
+
+## Immutable review context
+
+- Context belongs to the current production only; never automatically import a prior episode's working context.
+- Before every coherent AI edit, read \`context.md\`, v6 \`activity.md\`, \`history/index.json\`, relevant current artifacts, and durable specs; then run \`node videospec/bin/videospec.js snapshot <id> --note "before: ..."\`.
+- For v6, record approved content decisions in \`context.md\` and post-approval timing, build, QA, and packaging operations in \`activity.md\`. A substantive content change still updates signed files and makes content approval stale. Take before/after snapshots and retain a final snapshot if logging its ID changes the activity log. Never overwrite, rename, or delete \`history/V###\`.
+
+## Workflow
+
+conversation/reference triage → brief → evidence ledger → script → editorial opposition + duration-aware strict AI review → automatic fix/re-review → human content approval → storyboard + materials → TTS/video → bounded automated QA and fix/re-render loop → publication package → human final approval → human publish approval → human publication record → learning → standards sync → archive
+
+Automatically continue every consecutive non-human phase; do not request intermediate AI-work approval. Reuse a matching exploration handoff rather than repeating angle search, and respect a user-selected direction or protected script. Before costly production work, check the required renderer, built-in imagegen, TTS, subtitle, and inspection capabilities. Run lint after edits. AI never invents facts, rights, approvals, publication results, or platform data. Human gates are content, final video, and publication. Also stop for a genuinely unavailable external dependency or a blocking QA failure after bounded attempts. For QA, try at most two repairs per finding and three repair rounds per run; record the attempts and remaining risk. Never present a missing render or failed essential technical/rights check as ready for final approval.
+
+For v6 narration, leave approved script files unchanged and record measured timing in the voice manifest. Retain raw segments and use only the merged mono 48 kHz / 24-bit voice master (-16 LUFS, 6 LU LRA, -1.5 dBTP). After music and effects are mixed, require final-mix QA against stereo 48 kHz, -14 LUFS, and -1.0 dBTP. Generate the three publication covers with the imagegen skill in built-in mode in separate calls, store accepted 16:9, 4:3, and 3:4 assets in the production, and record prompt/provenance in publish.md.
+
+## Artifact authority by template version
+
+For v6, \`brief.md\` owns topic, selected promise and retention design; \`evidence.md\` owns reference coverage, research and verification; \`script.md\` owns one continuous blockquoted narration; \`activity.md\` owns operational change notes; \`learning.md\` owns post-publication analysis. Map evidence to brief beats, beats to exact narration anchors, storyboard scenes to beats, and materials to scenes. Do not create v5-only topic, reference-analysis, retention-plan, research, analytics or retrospective files in v6 productions. Existing productions retain their recorded template version and file layout.
+
+## Conversation and reference inputs
+
+- Treat all relevant user instructions, decisions, pasted material, attachments, links, and clarifications already present in the current conversation as current-production input. Record their source and role in \`evidence.md\` for v6 (or \`reference-analysis.md\` for v4–v5); do not require the user to repeat earlier discussion.
+- If the user adds or corrects reference material later in the same conversation before the content gate, update \`evidence.md\` for v6 (or \`reference-analysis.md\` for v4–v5) and rebuild the earliest affected content artifact automatically. After a content approval, preserve the approval record, let it become stale when a signed file changes, and return only to the content gate.
+- Current-conversation text is always a production source. Use \`conversation\` for user goals, decisions, and discussion; use \`extract\` for supplied source material; use \`adapt\` when the user asks to re-express the same substance. There is no \`inspire\` or context-free original path when relevant conversation content exists.
+- Every material conversation or reference unit must be preserved, reframed, or explicitly omitted with rationale and mapped to the resulting narration or storyboard beats. Never replace the stated discussion scope with a different topic.
+- Rephrase rather than copy protected wording, visual material, audio, or the source’s distinctive expression. Independently verify factual claims before presenting them as facts; copyright constraints limit expression, not the obligation to faithfully cover the user-requested ideas.
+`;
 }
 
 function fileHash(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
 }
 
-function hashGateFiles(dir, gate) {
-  return Object.fromEntries(GATE_FILES[gate].map((name) => {
+function hashGateFiles(dir, metadata, gate) {
+  return Object.fromEntries(gateFilesFor(metadata, gate).map((name) => {
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) throw new Error(`Missing gate artifact: ${name}`);
     return [name, fileHash(file)];
@@ -409,9 +648,10 @@ function hasTodo(file) {
   return fs.readFileSync(file, "utf8").includes("<!-- TODO");
 }
 
-function uncheckedTasks(file) {
+function uncheckedTasks(file, { beforeHeading } = {}) {
   const content = fs.readFileSync(file, "utf8");
-  return (content.match(/^\s*- \[ \]/gm) || []).length;
+  const relevant = beforeHeading ? content.split(beforeHeading)[0] : content;
+  return (relevant.match(/^\s*- \[ \]/gm) || []).length;
 }
 
 function parseFrontmatter(content) {
@@ -459,7 +699,7 @@ function assetBlocks(content) {
 }
 
 function narrationSceneBlocks(content) {
-  const matches = [...content.matchAll(/^## (\d{2,}:\d{2})[–-](\d{2,}:\d{2})｜(.+?)\s*$/gm)];
+  const matches = [...content.matchAll(/^## (\d{2,}:\d{2}(?:\.\d{3})?)[–-](\d{2,}:\d{2}(?:\.\d{3})?)｜(.+?)\s*$/gm)];
   return matches.map((match, index) => {
     const blockContent = content.slice(match.index, matches[index + 1]?.index ?? content.length);
     const id = /^- Scene ID:\s*(S\d{3})\s*$/m.exec(blockContent)?.[1] || null;
@@ -575,9 +815,10 @@ function numericDirectiveIssue(fields, key, min, max, scope) {
   return value < min || value > max ? [`${scope} ${key} must be between ${min} and ${max}.`] : [];
 }
 
-function lintNarrationScript(content) {
+function lintNarrationScript(content, templateVersion) {
   const issues = [];
   const blocks = narrationSceneBlocks(content);
+  const scriptAuthority = /^- Script authority:\s*(newly-authored|user-authored|user-authoritative)\s*$/m.exec(content)?.[1];
   const api = directiveFields(content, "接口与音频参数");
   issues.push(...requireDirectiveFields(api, [
     "endpoint",
@@ -609,22 +850,51 @@ function lintNarrationScript(content) {
       issues.push("script.md explicit_language is not a documented language value.");
     }
   }
+  if (templateVersion >= 5 && !scriptAuthority) {
+    issues.push("script.md must declare Script authority: newly-authored, user-authored, or user-authoritative.");
+  }
   if (!quotedMarkerText(content, "全局演绎提示")) issues.push("script.md must contain a blockquoted 全局演绎提示.");
+  if (templateVersion >= 6) {
+    const synthesis = directiveFields(content, "合成参数");
+    const narration = quotedMarkerText(content, "口播");
+    issues.push(...requireDirectiveFields(synthesis, [
+      "speech_rate",
+      "loudness_rate",
+      "silence_duration_ms",
+      "post_process_pitch",
+      "section_id",
+    ], "script.md 合成参数"));
+    issues.push(...numericDirectiveIssue(synthesis, "speech_rate", -50, 100, "script.md"));
+    issues.push(...numericDirectiveIssue(synthesis, "loudness_rate", -50, 100, "script.md"));
+    issues.push(...numericDirectiveIssue(synthesis, "silence_duration_ms", 0, 30000, "script.md"));
+    issues.push(...numericDirectiveIssue(synthesis, "post_process_pitch", -12, 12, "script.md"));
+    if (!narration) issues.push("script.md must contain one blockquoted continuous narration under **口播：**.");
+    return { issues, blocks: [], ranges: [] };
+  }
   if (!blocks.length) return { issues: [...issues, "script.md must contain at least one time-coded narration scene."], blocks: [] };
   const blocksWithIds = blocks.filter((block) => block.id);
   if (blocksWithIds.length !== blocks.length) issues.push("Every script.md narration scene must contain a Scene ID field.");
   issues.push(...checkSequentialIds(blocksWithIds, "S", "script.md"));
   for (const block of blocks) {
     const label = block.id || block.title;
-    issues.push(...requiredBlockParts({ ...block, id: label }, [
+    const required = [
       { label: "Purpose", pattern: /^- Purpose:\s*\S.*$/m },
       { label: "Evidence", pattern: /^- Evidence:\s*\S.*$/m },
       { label: "合成参数", pattern: /^\*\*合成参数：\*\*\s*$/m },
       { label: "演绎提示", pattern: /^\*\*演绎提示：\*\*\s*$/m },
       { label: "口播", pattern: /^\*\*口播：\*\*\s*$/m },
-      { label: "屏幕内容", pattern: /^\*\*屏幕内容：\*\*\s*$/m },
-      { label: "视觉意图", pattern: /^\*\*视觉意图：\*\*\s*$/m },
-    ], "script.md"));
+    ];
+    if (templateVersion >= 5) {
+      required.splice(1, 0,
+        { label: "Viewer state", pattern: /^- Viewer state:\s*\S.*$/m },
+        { label: "Narrative move", pattern: /^- Narrative move:\s*\S.*$/m },
+        { label: "Open loop or payoff", pattern: /^- Open loop or payoff:\s*\S.*$/m },
+      );
+      if (["user-authored", "user-authoritative"].includes(scriptAuthority)) {
+        required.splice(4, 0, { label: "Source subtitle coverage", pattern: /^- Source subtitle coverage:\s*(?!None\b)\S.*$/m });
+      }
+    }
+    issues.push(...requiredBlockParts({ ...block, id: label }, required, "script.md"));
     const synthesis = directiveFields(block.content, "合成参数");
     const direction = quotedMarkerText(block.content, "演绎提示");
     const narration = quotedMarkerText(block.content, "口播");
@@ -650,10 +920,122 @@ function lintNarrationScript(content) {
   return { issues, blocks, ranges: timing.ranges };
 }
 
-function lintStructuredArtifact(name, content, templateVersion) {
+function lintRetentionPlan(content, scriptIds) {
+  const issues = [];
+  const blocks = repeatedBlocks(content, /^### Beat (B\d{3})\s*$/gm);
+  if (!blocks.length) return { issues: ["retention-plan.md must contain at least one beat."], blocks: [] };
+  issues.push(...checkSequentialIds(blocks, "B", "retention-plan.md"));
+  const coveredScenes = new Set();
+  for (const block of blocks) {
+    issues.push(...requiredBlockParts(block, [
+      { label: "Time", pattern: /^- Time:\s*\S.*$/m },
+      { label: "Viewer state", pattern: /^- Viewer state:\s*\S.*$/m },
+      { label: "Narrative move", pattern: /^- Narrative move:\s*\S.*$/m },
+      { label: "Open loop or payoff", pattern: /^- Open loop or payoff:\s*\S.*$/m },
+      { label: "New value", pattern: /^- New value:\s*\S.*$/m },
+      { label: "Visual or audio shift", pattern: /^- Visual or audio shift:\s*\S.*$/m },
+      { label: "Script coverage", pattern: /^- Script coverage:\s*\S.*$/m },
+    ], "retention-plan.md"));
+    const coverage = /^- Script coverage:\s*(.+?)\s*$/m.exec(block.content)?.[1] || "";
+    const sceneIds = coverage.match(/S\d{3}/g) || [];
+    if (!sceneIds.length) issues.push(`retention-plan.md ${block.id} must map to at least one script scene.`);
+    for (const sceneId of sceneIds) {
+      coveredScenes.add(sceneId);
+      if (!scriptIds.has(sceneId)) issues.push(`retention-plan.md ${block.id} references missing script scene ${sceneId}.`);
+    }
+  }
+  for (const scriptId of scriptIds) {
+    if (!coveredScenes.has(scriptId)) issues.push(`retention-plan.md does not cover script scene ${scriptId}.`);
+  }
+  return { issues, blocks };
+}
+
+function lintReferenceAnalysis(content, scriptIds) {
+  const issues = [];
+  const mode = /^- Mode:\s*(conversation|extract|adapt|user-authored-script|authoritative-script)\s*$/m.exec(content)?.[1];
+  const source = /^- Reference input:\s*(.+?)\s*$/m.exec(content)?.[1];
+  const authority = /^- Authority:\s*(newly-authored|user-authored|user-authoritative)\s*$/m.exec(content)?.[1];
+  const sourceAsset = /^- Authoritative source asset:\s*(.+?)\s*$/m.exec(content)?.[1];
+  const blocks = repeatedBlocks(content, /^### Reference (R\d{3})\s*$/gm);
+  if (!mode) issues.push("reference-analysis.md must declare Mode: conversation, extract, adapt, user-authored-script, or authoritative-script.");
+  if (!source) issues.push("reference-analysis.md must declare Reference input.");
+  if (mode === "authoritative-script" && authority !== "user-authoritative") {
+    issues.push("reference-analysis.md authoritative-script mode must declare Authority: user-authoritative.");
+  }
+  if (mode === "user-authored-script" && authority !== "user-authored") {
+    issues.push("reference-analysis.md user-authored-script mode must declare Authority: user-authored.");
+  }
+  if (["authoritative-script", "user-authored-script"].includes(mode) && (!sourceAsset || /^None$/i.test(sourceAsset))) {
+    issues.push(`reference-analysis.md ${mode} mode must declare an Authoritative source asset.`);
+  }
+  if (mode && !blocks.length) issues.push("reference-analysis.md must map at least one material conversation or reference unit.");
+  issues.push(...checkSequentialIds(blocks, "R", "reference-analysis.md"));
+  for (const block of blocks) {
+    issues.push(...requiredBlockParts(block, [
+      { label: "Source locator", pattern: /^- Source locator:\s*\S.*$/m },
+      { label: "Extracted idea", pattern: /^- Extracted idea:\s*\S.*$/m },
+      { label: "Verification", pattern: /^- Verification:\s*\S.*$/m },
+      { label: "Adaptation decision", pattern: /^- Adaptation decision:\s*(preserve|reframe|omit)\s*$/m },
+      { label: "Script coverage", pattern: /^- Script coverage:\s*\S.*$/m },
+    ], "reference-analysis.md"));
+    const coverage = /^- Script coverage:\s*(.+?)\s*$/m.exec(block.content)?.[1];
+    const decision = /^- Adaptation decision:\s*(preserve|reframe|omit)\s*$/m.exec(block.content)?.[1];
+    if (["authoritative-script", "user-authored-script"].includes(mode) && decision !== "preserve") {
+      issues.push(`reference-analysis.md ${block.id} must use Adaptation decision: preserve for a user script.`);
+    }
+    if (decision === "omit") {
+      if (!/^Omitted — .+/.test(coverage || "")) {
+        issues.push(`reference-analysis.md ${block.id} omitted material must state its rationale in Script coverage.`);
+      }
+      continue;
+    }
+    const coveredScenes = (coverage || "").match(/S\d{3}/g) || [];
+    if (!coveredScenes.length) {
+      issues.push(`reference-analysis.md ${block.id} must map preserved or reframed material to at least one script scene.`);
+    }
+    for (const scene of coveredScenes) {
+      if (!scriptIds.has(scene)) issues.push(`reference-analysis.md ${block.id} references missing script scene ${scene}.`);
+    }
+  }
+  return { issues, blocks };
+}
+
+function lintPublicationTags(content, templateVersion) {
+  const marker = /^## Ten publication tags\s*$/m.exec(content);
+  if (!marker) return { issues: ["publish.md must contain a Ten publication tags section."] };
+  const remainder = content.slice(marker.index + marker[0].length);
+  const nextHeading = remainder.search(/^##\s+/m);
+  const section = remainder.slice(0, nextHeading < 0 ? remainder.length : nextHeading);
+  if (templateVersion >= 6) {
+    const tagLines = section.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.startsWith("#"));
+    const tags = tagLines.flatMap((line) => line.split(/\s+/));
+    if (/^\s*\d+\.\s+/m.test(section) || tagLines.some((line) => !/^(?:#[^\s#]+\s*)+$/.test(line)) || tags.length !== 10) {
+      return { issues: ["publish.md must list exactly ten unnumbered #hashtags."] };
+    }
+    const values = tags.map((tag) => tag.slice(1).toLocaleLowerCase());
+    if (values.some((value) => !value || /TODO|Unresolved|待填/i.test(value))) {
+      return { issues: ["publish.md has an unresolved publication tag."] };
+    }
+    if (new Set(values).size !== values.length) return { issues: ["publish.md publication tags must be distinct."] };
+    return { issues: [] };
+  }
+  const tags = [...section.matchAll(/^(\d+)\.\s+(.+?)\s*$/gm)];
+  const expected = Array.from({ length: 10 }, (_, index) => String(index + 1));
+  if (tags.length !== 10 || tags.map((match) => match[1]).join(",") !== expected.join(",")) {
+    return { issues: ["publish.md must list exactly ten numbered publication tags (1–10)."] };
+  }
+  const values = tags.map((match) => match[2].trim().toLocaleLowerCase());
+  if (values.some((value) => !value || /TODO|Unresolved/i.test(value))) {
+    return { issues: ["publish.md has an unresolved publication tag."] };
+  }
+  if (new Set(values).size !== values.length) return { issues: ["publish.md publication tags must be distinct."] };
+  return { issues: [] };
+}
+
+function lintStructuredArtifact(name, content, templateVersion, scriptIds = new Set()) {
   const issues = [];
   if (name === "script.md") {
-    if (templateVersion >= 2) return lintNarrationScript(content);
+    if (templateVersion >= 2) return lintNarrationScript(content, templateVersion);
     const blocks = sceneBlocks(content);
     if (!blocks.length) return { issues: ["script.md must contain at least one scene."], blocks: [] };
     issues.push(...checkSequentialIds(blocks, "S", name));
@@ -675,13 +1057,23 @@ function lintStructuredArtifact(name, content, templateVersion) {
     if (!blocks.length) return { issues: ["storyboard.md must contain at least one scene."], blocks: [] };
     issues.push(...checkSequentialIds(blocks, "S", name));
     for (const block of blocks) {
-      issues.push(...requiredBlockParts(block, [
-        { label: "Script scene", pattern: /^- Script scene:\s*S\d{3}\s*$/m },
+      const required = [
+        templateVersion >= 6
+          ? { label: "Brief beat or legacy Script scene", pattern: /^- (?:Brief beat:\s*B\d{3}|Script scene:\s*S\d{3})\s*$/m }
+          : { label: "Script scene", pattern: /^- Script scene:\s*S\d{3}\s*$/m },
         { label: "Visual composition", pattern: /^#### Visual composition\s*$/m },
         { label: "Motion and transition", pattern: /^#### Motion and transition\s*$/m },
         { label: "Audio", pattern: /^#### Audio\s*$/m },
         { label: "Acceptance check", pattern: /^#### Acceptance check\s*$/m },
-      ], name));
+      ];
+      if (templateVersion >= 5) {
+        required.splice(1, 0,
+          { label: "Visual mode", pattern: /^- Visual mode:\s*\S.*$/m },
+          { label: "Attention task", pattern: /^- Attention task:\s*\S.*$/m },
+          { label: "Visual beat and attention", pattern: /^#### Visual beat and attention\s*$/m },
+        );
+      }
+      issues.push(...requiredBlockParts(block, required, name));
     }
     const timing = lintSceneTiming(blocks, name);
     issues.push(...timing.issues);
@@ -703,6 +1095,9 @@ function lintStructuredArtifact(name, content, templateVersion) {
     }
     return { issues, blocks };
   }
+  if (name === "publish.md" && templateVersion >= 3) return lintPublicationTags(content, templateVersion);
+  if (name === "reference-analysis.md" && templateVersion >= 4) return lintReferenceAnalysis(content, scriptIds);
+  if (name === "retention-plan.md" && templateVersion >= 5) return lintRetentionPlan(content, scriptIds);
   return { issues: [], blocks: [] };
 }
 
@@ -753,7 +1148,7 @@ function lintJsonFile(file, schemaFile, label) {
   return jsonSchemaIssues(value, readJson(schemaFile), label);
 }
 
-function lintArtifact(dir, metadata, name, { checkTodo = true } = {}) {
+function lintArtifact(dir, metadata, name, { checkTodo = true, scriptIds = new Set() } = {}) {
   const file = path.join(dir, name);
   if (!fs.existsSync(file)) return { issues: [`Missing ${name}.`], warnings: [], detail: null };
   const content = fs.readFileSync(file, "utf8");
@@ -793,9 +1188,106 @@ function lintArtifact(dir, metadata, name, { checkTodo = true } = {}) {
   }
   if (/\{\{[a-zA-Z0-9.]+\}\}/.test(content)) issues.push(`${name} contains an unresolved template variable.`);
   if (checkTodo && content.includes("<!-- TODO")) issues.push(`${name} contains unresolved TODO markers.`);
-  const detail = lintStructuredArtifact(name, frontmatter.body, metadata.templateVersion);
+  const detail = lintStructuredArtifact(name, frontmatter.body, metadata.templateVersion, scriptIds);
   issues.push(...detail.issues);
   return { issues: [...new Set(issues)], warnings: [], detail };
+}
+
+function v6ContentMappings(dir, { strict = false } = {}) {
+  const briefFile = path.join(dir, "brief.md");
+  const evidenceFile = path.join(dir, "evidence.md");
+  const scriptFile = path.join(dir, "script.md");
+  if (![briefFile, evidenceFile, scriptFile].every((file) => fs.existsSync(file))) return { issues: [], beatIds: new Set() };
+  const brief = fs.readFileSync(briefFile, "utf8");
+  const evidence = fs.readFileSync(evidenceFile, "utf8");
+  const script = fs.readFileSync(scriptFile, "utf8");
+  const narration = (quotedMarkerText(script, "口播") || "").replace(/\s+/g, " ").trim();
+  const beats = repeatedBlocks(brief, /^### Beat (B\d{3})\s*$/gm);
+  const beatIds = new Set(beats.map((beat) => beat.id));
+  const issues = [...checkSequentialIds(beats, "B", "brief.md")];
+  if (!beats.length) issues.push("brief.md must contain at least one retention beat.");
+  for (const beat of beats) {
+    const anchor = /^- Narration anchor:\s*(.+?)\s*$/m.exec(beat.content)?.[1];
+    if (!anchor) {
+      if (strict) issues.push(`brief.md ${beat.id} must declare a Narration anchor.`);
+      continue; // Early v6 productions may use the former Script coverage field.
+    }
+    const exact = anchor.replace(/^["“]|["”]$/g, "").replace(/\s+/g, " ").trim();
+    if (!exact || !narration.includes(exact)) issues.push(`brief.md ${beat.id} narration anchor is not present in script.md.`);
+  }
+  const references = repeatedBlocks(evidence, /^### Reference (R\d{3})\s*$/gm);
+  issues.push(...checkSequentialIds(references, "R", "evidence.md"));
+  if (strict && !references.length) issues.push("evidence.md must map at least one reference unit.");
+  for (const reference of references) {
+    const coverage = /^- Brief beat coverage:\s*(.+?)\s*$/m.exec(reference.content)?.[1];
+    if (!coverage) {
+      if (strict) issues.push(`evidence.md ${reference.id} must declare Brief beat coverage.`);
+      continue; // Compatibility with early v6 Script scene coverage.
+    }
+    const disposition = /^- Disposition:\s*(preserve|reframe|omit)\s*$/m.exec(reference.content)?.[1];
+    if (!disposition) issues.push(`evidence.md ${reference.id} must declare Disposition: preserve, reframe, or omit.`);
+    if (disposition === "omit") {
+      const reason = /^- Omission rationale:\s*(.+?)\s*$/m.exec(reference.content)?.[1];
+      if (!reason || /^None$/i.test(reason)) issues.push(`evidence.md ${reference.id} omitted material needs an omission rationale.`);
+      continue;
+    }
+    const ids = coverage.match(/B\d{3}/g) || [];
+    if (!ids.length) issues.push(`evidence.md ${reference.id} must map to at least one brief beat.`);
+    for (const beatId of ids) {
+      if (!beatIds.has(beatId)) issues.push(`evidence.md ${reference.id} references missing brief beat ${beatId}.`);
+    }
+  }
+  return { issues, beatIds };
+}
+
+function v6SceneMappings(dir, { requireCoverage = false, strict = false } = {}) {
+  const storyboardFile = path.join(dir, "storyboard.md");
+  if (!fs.existsSync(storyboardFile)) return [];
+  const storyboard = fs.readFileSync(storyboardFile, "utf8");
+  const scenes = sceneBlocks(storyboard);
+  const sceneIds = new Set(scenes.map((scene) => scene.id));
+  const { beatIds } = v6ContentMappings(dir, { strict });
+  const coveredBeats = new Set();
+  const issues = [];
+  for (const scene of scenes) {
+    const beat = /^- Brief beat:\s*(B\d{3})\s*$/m.exec(scene.content)?.[1];
+    const legacy = /^- Script scene:\s*(S\d{3})\s*$/m.exec(scene.content)?.[1];
+    if (beat) {
+      coveredBeats.add(beat);
+      if (!beatIds.has(beat)) issues.push(`storyboard.md ${scene.id} references missing brief beat ${beat}.`);
+    } else if (strict) {
+      issues.push(`storyboard.md ${scene.id} must reference a Brief beat.`);
+    } else if (legacy && legacy !== scene.id) {
+      issues.push(`storyboard.md ${scene.id} must reference matching legacy scene ${scene.id}.`);
+    }
+  }
+  const briefFile = path.join(dir, "brief.md");
+  const newMapping = fs.existsSync(briefFile) && fs.readFileSync(briefFile, "utf8").includes("- Narration anchor:");
+  if (requireCoverage && (strict || newMapping)) {
+    for (const beatId of beatIds) {
+      if (!coveredBeats.has(beatId)) issues.push(`storyboard.md does not cover brief beat ${beatId}.`);
+    }
+  }
+  const materialsFile = path.join(dir, "materials.md");
+  if (fs.existsSync(materialsFile)) {
+    for (const asset of assetBlocks(fs.readFileSync(materialsFile, "utf8"))) {
+      const scene = /^- Scene:\s*(S\d{3})\s*$/m.exec(asset.content)?.[1];
+      if (scene && !sceneIds.has(scene)) issues.push(`materials.md ${asset.id} references missing storyboard scene ${scene}.`);
+    }
+  }
+  if (requireCoverage && !strict && !newMapping) {
+    for (const name of ["brief.md", "evidence.md"]) {
+      const file = path.join(dir, name);
+      if (!fs.existsSync(file)) continue;
+      const text = fs.readFileSync(file, "utf8");
+      for (const match of text.matchAll(/^- (?:Script coverage|Script scene coverage):\s*(.+?)\s*$/gm)) {
+        for (const scene of match[1].match(/S\d{3}/g) || []) {
+          if (!sceneIds.has(scene)) issues.push(`${name} references missing storyboard scene ${scene}.`);
+        }
+      }
+    }
+  }
+  return issues;
 }
 
 export function lintProduction(projectRoot, id) {
@@ -821,25 +1313,50 @@ export function lintProduction(projectRoot, id) {
     path.join(schemaRoot(metadata.templateVersion), "deliverables.schema.json"),
     "deliverables.json",
   ));
-  for (const name of Object.values(ARTIFACTS)) {
-    results[name] = lintArtifact(dir, metadata, name);
+  for (const name of Object.values(artifactsFor(metadata))) {
+    if (metadata.templateVersion >= 4 && name === "reference-analysis.md") continue;
+    if (metadata.templateVersion >= 5 && name === "retention-plan.md") continue;
+    results[name] = lintArtifact(dir, metadata, name, { checkTodo: metadata.templateVersion < 3 });
     issues.push(...results[name].issues);
   }
 
   const scriptIds = new Set((results["script.md"].detail?.blocks || []).map((block) => block.id));
-  const storyboardBlocks = results["storyboard.md"].detail?.blocks || [];
-  const storyboardIds = new Set(storyboardBlocks.map((block) => block.id));
-  for (const scriptId of scriptIds) {
-    if (!storyboardIds.has(scriptId)) issues.push(`storyboard.md is missing script scene ${scriptId}.`);
+  if (metadata.templateVersion >= 4 && metadata.templateVersion < 6) {
+    const referenceFile = "reference-analysis.md";
+    results[referenceFile] = lintArtifact(dir, metadata, referenceFile, {
+      checkTodo: metadata.templateVersion < 3,
+      scriptIds,
+    });
+    issues.push(...results[referenceFile].issues);
   }
-  for (const block of storyboardBlocks) {
-    const reference = /^- Script scene:\s*(S\d{3})\s*$/m.exec(block.content)?.[1];
-    if (reference && !scriptIds.has(reference)) issues.push(`storyboard.md ${block.id} references missing script scene ${reference}.`);
-    else if (reference && reference !== block.id) issues.push(`storyboard.md ${block.id} must reference matching script scene ${block.id}.`);
+  if (metadata.templateVersion >= 5 && metadata.templateVersion < 6) {
+    const retentionFile = "retention-plan.md";
+    results[retentionFile] = lintArtifact(dir, metadata, retentionFile, {
+      checkTodo: metadata.templateVersion < 3,
+      scriptIds,
+    });
+    issues.push(...results[retentionFile].issues);
   }
-  for (const block of results["materials.md"].detail?.blocks || []) {
-    const reference = /^- Scene:\s*(S\d{3})\s*$/m.exec(block.content)?.[1];
-    if (reference && !scriptIds.has(reference)) issues.push(`materials.md ${block.id} references missing script scene ${reference}.`);
+  if (metadata.templateVersion < 6) {
+    const storyboardBlocks = results["storyboard.md"].detail?.blocks || [];
+    const storyboardIds = new Set(storyboardBlocks.map((block) => block.id));
+    for (const scriptId of scriptIds) {
+      if (!storyboardIds.has(scriptId)) issues.push(`storyboard.md is missing script scene ${scriptId}.`);
+    }
+    for (const block of storyboardBlocks) {
+      const reference = /^- Script scene:\s*(S\d{3})\s*$/m.exec(block.content)?.[1];
+      if (reference && !scriptIds.has(reference)) issues.push(`storyboard.md ${block.id} references missing script scene ${reference}.`);
+      else if (reference && reference !== block.id) issues.push(`storyboard.md ${block.id} must reference matching script scene ${block.id}.`);
+    }
+    for (const block of results["materials.md"].detail?.blocks || []) {
+      const reference = /^- Scene:\s*(S\d{3})\s*$/m.exec(block.content)?.[1];
+      if (reference && !scriptIds.has(reference)) issues.push(`materials.md ${block.id} references missing script scene ${reference}.`);
+    }
+  }
+  if (metadata.templateVersion >= 6) {
+    const strict = metadata.artifactContractVersion >= 2;
+    issues.push(...v6ContentMappings(dir, { strict }).issues);
+    issues.push(...v6SceneMappings(dir, { strict }));
   }
 
   const ranges = results["script.md"].detail?.ranges || [];
@@ -860,17 +1377,22 @@ export function lintProduction(projectRoot, id) {
 
 function gateIssues(dir, metadata, gate, { prerequisites = true } = {}) {
   const issues = [];
-  if (!GATES.includes(gate)) return [`Unknown gate: ${gate}`];
+  const gates = gatesFor(metadata);
+  const scriptFile = path.join(dir, "script.md");
+  const referenceScriptIds = metadata.templateVersion >= 4 && fs.existsSync(scriptFile)
+    ? new Set(narrationSceneBlocks(fs.readFileSync(scriptFile, "utf8")).map((block) => block.id).filter(Boolean))
+    : new Set();
+  if (!gates.includes(gate)) return [`Unknown gate: ${gate}`];
 
   if (prerequisites) {
-    const index = GATES.indexOf(gate);
-    for (const prior of GATES.slice(0, index)) {
+    const index = gates.indexOf(gate);
+    for (const prior of gates.slice(0, index)) {
       const priorIssues = approvalIssues(dir, metadata, prior);
       if (priorIssues.length) issues.push(`Prior gate '${prior}' is not valid.`);
     }
   }
 
-  for (const name of GATE_FILES[gate]) {
+  for (const name of gateFilesFor(metadata, gate)) {
     const file = path.join(dir, name);
     if (!fs.existsSync(file)) {
       issues.push(`Missing ${name}.`);
@@ -878,16 +1400,32 @@ function gateIssues(dir, metadata, gate, { prerequisites = true } = {}) {
     }
     if (name.endsWith(".md") && hasTodo(file)) issues.push(`${name} contains unresolved TODO markers.`);
     if (name.endsWith(".md") && metadata.templateVersion) {
-      issues.push(...lintArtifact(dir, metadata, name, { checkTodo: false }).issues);
+      issues.push(...lintArtifact(dir, metadata, name, {
+        checkTodo: false,
+        scriptIds: ["reference-analysis.md", "retention-plan.md"].includes(name) ? referenceScriptIds : new Set(),
+      }).issues);
     }
     if (["tasks.md", "review.md"].includes(name)) {
-      const count = uncheckedTasks(file);
+      const count = uncheckedTasks(file, name === "review.md" && metadata.templateVersion >= 6
+        ? { beforeHeading: "## Human final checklist" }
+        : {});
       if (count) issues.push(`${name} has ${count} unchecked task(s).`);
     }
   }
 
-  if (gate === "final") {
+  if (gate === "final" || (gate === "publish" && metadata.templateVersion >= 6)) {
     issues.push(...deliverableIssues(dir));
+  }
+  if (metadata.templateVersion >= 6 && gate === "content") issues.push(...v6ContentMappings(dir, { strict: metadata.artifactContractVersion >= 2 }).issues);
+  if (metadata.templateVersion >= 6 && gate === "final") issues.push(...v6SceneMappings(dir, { requireCoverage: true, strict: metadata.artifactContractVersion >= 2 }));
+  if (metadata.templateVersion >= 6 && ["final", "publish"].includes(gate)) {
+    const packageFile = path.join(dir, "publish.md");
+    if (fs.existsSync(packageFile)) {
+      const publication = fs.readFileSync(packageFile, "utf8");
+      for (const cover of V6_COVERS) {
+        if (!publication.includes(cover)) issues.push(`publish.md must reference ${cover}.`);
+      }
+    }
   }
   return issues;
 }
@@ -897,12 +1435,28 @@ function approvalIssues(dir, metadata, gate) {
   if (!approval) return [`Gate '${gate}' has not been approved.`];
   let current;
   try {
-    current = hashGateFiles(dir, gate);
+    current = hashGateFiles(dir, metadata, gate);
   } catch (error) {
     return [error.message];
   }
   const stale = Object.keys(current).filter((name) => current[name] !== approval.hashes?.[name]);
-  return stale.map((name) => `Gate '${gate}' is stale because ${name} changed after approval.`);
+  const issues = stale.map((name) => `Gate '${gate}' is stale because ${name} changed after approval.`);
+  if (["final", "publish"].includes(gate)) {
+    issues.push(...deliverableIssues(dir).map((issue) => `Gate '${gate}' is stale: ${issue}`));
+  }
+  return issues;
+}
+
+function insideDirectory(dir, file) {
+  const relative = path.relative(dir, file);
+  return relative && relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+}
+
+function resolveDeliverable(dir, storedPath) {
+  if (typeof storedPath !== "string" || !storedPath) return null;
+  const resolved = path.resolve(dir, storedPath);
+  if (!path.isAbsolute(storedPath) && !insideDirectory(dir, resolved)) return null;
+  return resolved;
 }
 
 function deliverableIssues(dir) {
@@ -917,9 +1471,10 @@ function deliverableIssues(dir) {
   if (!Array.isArray(items) || items.length === 0) return ["No deliverable has been registered."];
   const issues = [];
   for (const item of items) {
-    if (!item.path || !fs.existsSync(item.path)) {
+    const file = resolveDeliverable(dir, item.path);
+    if (!file || !fs.existsSync(file)) {
       issues.push(`Deliverable is missing: ${item.path || "<empty path>"}.`);
-    } else if (fileHash(item.path) !== item.sha256) {
+    } else if (fileHash(file) !== item.sha256) {
       issues.push(`Deliverable changed after registration: ${item.path}.`);
     }
   }
@@ -927,16 +1482,17 @@ function deliverableIssues(dir) {
 }
 
 export function approveGate(projectRoot, id, gate, by) {
-  if (!GATES.includes(gate)) throw new Error(`Gate must be one of: ${GATES.join(", ")}`);
   if (!by) throw new Error("Approver is required. Pass `--by <name>`. ");
   const production = loadProduction(projectRoot, id);
+  const gates = gatesFor(production.metadata);
+  if (!gates.includes(gate)) throw new Error(`Gate must be one of: ${gates.join(", ")}`);
   const issues = gateIssues(production.dir, production.metadata, gate);
   if (issues.length) throw new Error(`Cannot approve ${gate}:\n- ${issues.join("\n- ")}`);
 
   production.metadata.approvals[gate] = {
     by,
     at: now(),
-    hashes: hashGateFiles(production.dir, gate),
+    hashes: hashGateFiles(production.dir, production.metadata, gate),
   };
   production.metadata.updatedAt = now();
   writeJson(production.metadataFile, production.metadata);
@@ -951,16 +1507,23 @@ export function registerDeliverable(projectRoot, id, inputPath, label) {
   }
   const manifestFile = path.join(production.dir, "deliverables.json");
   const items = readJson(manifestFile);
+  const digest = fileHash(absolute);
+  const source = fs.realpathSync(absolute);
+  const stored = path.join(production.dir, "renders", "registered", `${digest.slice(0, 16)}-${path.basename(absolute)}`);
+  fs.mkdirSync(path.dirname(stored), { recursive: true });
+  if (!fs.existsSync(stored)) fs.copyFileSync(source, stored);
+  if (fileHash(stored) !== digest) throw new Error(`Registered deliverable copy differs from source: ${stored}`);
   const item = {
     label: label || path.basename(absolute),
-    path: absolute,
-    sha256: fileHash(absolute),
+    path: path.relative(production.dir, stored),
+    sha256: digest,
     registeredAt: now(),
   };
   const next = items.filter((entry) => entry.label !== item.label);
   next.push(item);
   writeJson(manifestFile, next);
   production.metadata.approvals.final = null;
+  if (production.metadata.templateVersion >= 3) production.metadata.approvals.publish = null;
   production.metadata.updatedAt = now();
   writeJson(production.metadataFile, production.metadata);
   return item;
@@ -973,8 +1536,14 @@ function artifactState(file, key, dir, metadata, name) {
     const issues = lintArtifact(dir, metadata, name, { checkTodo: false }).issues;
     if (issues.length) return { state: "draft", reason: `${issues.length} structure issue(s)` };
   }
+  if (key === "publish" && metadata.templateVersion >= 6) {
+    const missing = V6_COVERS.filter((cover) => !fs.existsSync(path.join(dir, cover)));
+    if (missing.length) return { state: "draft", reason: `missing ${missing.join(", ")}` };
+  }
   if (["tasks", "review"].includes(key)) {
-    const count = uncheckedTasks(file);
+    const count = uncheckedTasks(file, key === "review" && metadata.templateVersion >= 6
+      ? { beforeHeading: "## Human final checklist" }
+      : {});
     if (count) return { state: "draft", reason: `${count} unchecked task(s)` };
   }
   return { state: "ready" };
@@ -982,11 +1551,11 @@ function artifactState(file, key, dir, metadata, name) {
 
 export function getStatus(projectRoot, id) {
   const { dir, metadata } = loadProduction(projectRoot, id);
-  const artifacts = Object.fromEntries(Object.entries(ARTIFACTS).map(([key, name]) => [
+  const artifacts = Object.fromEntries(Object.entries(artifactsFor(metadata)).map(([key, name]) => [
     key,
     artifactState(path.join(dir, name), key, dir, metadata, name),
   ]));
-  const approvals = Object.fromEntries(GATES.map((gate) => {
+  const approvals = Object.fromEntries(gatesFor(metadata).map((gate) => {
     const approval = metadata.approvals?.[gate];
     if (!approval) return [gate, { state: "pending" }];
     const issues = approvalIssues(dir, metadata, gate);
@@ -1010,6 +1579,49 @@ export function getStatus(projectRoot, id) {
 
 export function nextActions(projectRoot, id) {
   const status = getStatus(projectRoot, id);
+  const { metadata } = loadProduction(projectRoot, id);
+  if (metadata.templateVersion >= 3) {
+    const contentArtifacts = metadata.templateVersion >= 6
+      ? ["context", "brief", "evidence", "script", "contentReview"]
+      : metadata.templateVersion >= 5
+      ? ["context", "topic", "referenceAnalysis", "retentionPlan", "research", "script", "contentReview"]
+      : ["context", "topic", "research", "script", "contentReview"];
+    if (status.approvals.content.state !== "approved") {
+      if (contentArtifacts.some((key) => status.artifacts[key].state !== "ready")) {
+        return [metadata.templateVersion >= 6
+          ? "Automatically complete the brief, evidence ledger, script, editorial opposition, strict AI review, and any fixable review/re-review loop."
+          : metadata.templateVersion >= 5
+          ? "Automatically complete the angle slate, retention plan, research, script, editorial opposition, strict AI review, and any fixable review/re-review loop."
+          : "Automatically complete topic, research, script, strict AI review, and any fixable review/re-review loop."];
+      }
+      return [`Request content approval${status.approvals.content.state === "stale" ? " again" : ""}.`];
+    }
+    if (["storyboard", "materials"].some((key) => status.artifacts[key].state !== "ready")) {
+      return ["Automatically complete storyboard.md and materials.md, then continue to TTS/video production."];
+    }
+    const productionActions = [];
+    if (status.artifacts.tasks.state !== "ready") productionActions.push("Complete TTS and video production tasks in tasks.md.");
+    if (status.deliverables.state !== "ready") productionActions.push("Render and register at least one deliverable.");
+    if (productionActions.length) return ["Automatically complete the remaining production work: " + productionActions.join(" ")];
+    if (status.artifacts.review.state !== "ready") return ["Automatically complete review.md; auto-fix and re-check findings that stay within approved scope; do not tick human checklist items."];
+    if (status.artifacts.publish.state !== "ready") return ["Automatically complete the release package before final approval: selected title, separately composed 16:9/4:3/3:4 covers, description, exactly ten distinct tags, platform settings, and a master-promise check."];
+    if (status.approvals.final.state !== "approved") {
+      return [`Request final-video approval${status.approvals.final.state === "stale" ? " again" : ""}.`];
+    }
+    if (status.approvals.publish.state !== "approved") {
+      return [`Request publication approval${status.approvals.publish.state === "stale" ? " again" : ""}.`];
+    }
+    const learningKeys = metadata.templateVersion >= 6 ? ["learning"] : ["analytics", "retrospective"];
+    if (learningKeys.some((key) => status.artifacts[key].state !== "ready")) {
+      return [metadata.templateVersion >= 6
+        ? "When the real publication record and authorized data are available, automatically complete learning.md; promote only explicit durable standards, not this production's working context."
+        : "When the real publication record and authorized data are available, automatically complete analytics.md and retrospective.md; promote only explicit durable standards, not this production's working context."];
+    }
+    if (["pending", "stale"].includes(status.standardsDelta.state)) {
+      return [`Sync the durable standards delta${status.standardsDelta.state === "stale" ? " again" : ""}.`];
+    }
+    return ["Archive the completed production."];
+  }
   if (["proposal", "brief"].some((key) => status.artifacts[key].state !== "ready")) {
     return ["Complete proposal.md and brief.md."];
   }
@@ -1039,7 +1651,7 @@ export function nextActions(projectRoot, id) {
 export function validateProduction(projectRoot, id) {
   const { dir, metadata } = loadProduction(projectRoot, id);
   const issues = [];
-  for (const gate of GATES) {
+  for (const gate of gatesFor(metadata)) {
     issues.push(...gateIssues(dir, metadata, gate, { prerequisites: false }));
     issues.push(...approvalIssues(dir, metadata, gate));
   }
@@ -1047,6 +1659,21 @@ export function validateProduction(projectRoot, id) {
   const syncState = standardsSyncState(metadata, deltas);
   if (syncState === "pending") issues.push("Standards delta has not been synced.");
   if (syncState === "stale") issues.push("Standards delta changed after it was synced.");
+  if (metadata.templateVersion >= 3) {
+    const learningArtifacts = metadata.templateVersion >= 6
+      ? { learning: "learning.md" }
+      : { analytics: "analytics.md", retrospective: "retrospective.md" };
+    for (const [key, name] of Object.entries(learningArtifacts)) {
+      const state = artifactState(path.join(dir, name), key, dir, metadata, name);
+      if (state.state !== "ready") issues.push(`${name} is not ready for archive${state.reason ? `: ${state.reason}` : "."}`);
+    }
+    const publication = path.join(dir, "publication.json");
+    try {
+      if (!readJson(publication).published) issues.push("publication.json has no human publication record.");
+    } catch {
+      issues.push("publication.json is missing or invalid.");
+    }
+  }
   return { valid: issues.length === 0, issues: [...new Set(issues)] };
 }
 
@@ -1165,6 +1792,37 @@ export function syncStandards(projectRoot, id) {
   return { operationCount: deltas.operationCount, files: writes.map((item) => item.target) };
 }
 
+function relocateDeliverablesForArchive(production) {
+  const manifestFile = path.join(production.dir, "deliverables.json");
+  const items = readJson(manifestFile);
+  const changes = [];
+  const relocated = items.map((item) => {
+    const source = fs.realpathSync(resolveDeliverable(production.dir, item.path));
+    let target = source;
+    if (!insideDirectory(production.dir, source)) {
+      target = path.join(production.dir, "renders", "registered", `${item.sha256.slice(0, 16)}-${path.basename(source)}`);
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      if (!fs.existsSync(target)) fs.copyFileSync(source, target);
+      if (fileHash(target) !== item.sha256) throw new Error(`Archived deliverable copy differs from approved file: ${item.path}`);
+    }
+    const relative = path.relative(production.dir, target);
+    if (relative !== item.path) changes.push({ from: item.path, to: relative, sha256: item.sha256 });
+    return { ...item, path: relative };
+  });
+  if (!changes.length) return;
+
+  const beforeHash = fileHash(manifestFile);
+  writeJson(manifestFile, relocated);
+  const afterHash = fileHash(manifestFile);
+  for (const approval of Object.values(production.metadata.approvals || {})) {
+    if (approval?.hashes?.["deliverables.json"] === beforeHash) {
+      approval.hashes["deliverables.json"] = afterHash;
+    }
+  }
+  production.metadata.archivePathMigration = { at: now(), beforeHash, afterHash, changes };
+  writeJson(production.metadataFile, production.metadata);
+}
+
 export function archiveProduction(projectRoot, id) {
   const production = loadProduction(projectRoot, id);
   const result = validateProduction(projectRoot, id);
@@ -1172,6 +1830,9 @@ export function archiveProduction(projectRoot, id) {
   const date = new Date().toISOString().slice(0, 10);
   const destination = path.join(productionRoot(projectRoot), "archive", `${date}-${id}`);
   if (fs.existsSync(destination)) throw new Error(`Archive destination already exists: ${destination}`);
+  relocateDeliverablesForArchive(production);
+  const relocated = validateProduction(projectRoot, id);
+  if (!relocated.valid) throw new Error(`Cannot archive ${id} after relocating deliverables:\n- ${relocated.issues.join("\n- ")}`);
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   production.metadata.archivedAt = now();
   writeJson(production.metadataFile, production.metadata);

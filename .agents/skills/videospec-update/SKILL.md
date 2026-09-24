@@ -1,20 +1,21 @@
 ---
 name: videospec-update
-description: Revise an active VideoSpec production after feedback or new learning while keeping proposal, brief, script, storyboard, materials, tasks, and review artifacts coherent. Use when the user asks to change direction, incorporate notes, replace material, alter timing, or update an approved video plan.
+description: Revise one production with immutable before/after snapshots and a non-destructive review context ledger.
 ---
 
 # Update a production
 
-1. Select the production, read `production.json`, all planning artifacts, durable specs, and `node videospec/bin/videospec.js status <id> --json`.
-2. Translate the requested revision into affected artifacts before editing. Preserve the same production only when its intent remains substantially the same; propose a new production if the audience, primary outcome, or majority of scope changes.
-3. Edit the earliest affected artifact, then reconcile every dependent artifact:
-   - proposal/brief changes may affect everything
-   - script changes may affect storyboard, materials, tasks, and review
-   - storyboard changes may affect materials and tasks
-   - material changes may affect rights, tasks, and visual treatment
-4. Preserve the production's template contract while editing: do not change frontmatter, fixed headings, heading order, field names, or identifier formats. Add content inside existing sections and repeat the documented scene/asset blocks when more entries are needed. In template v2 scripts, keep scene headings in `MM:SS–MM:SS｜title` format, keep narration blockquoted under `**口播：**`, keep Volcengine API parameters numeric and in range, and update `演绎提示` whenever wording, timing, or dramatic intent changes. Use `None`, `Unresolved`, or `Unassigned` instead of deleting a field.
-5. Do not edit approval records in `production.json`. File hashes intentionally make affected approvals stale.
-6. If a deliverable is replaced, register the new file with `node videospec/bin/videospec.js deliver`; this clears final approval.
-7. Run `node videospec/bin/videospec.js lint <id> --json` and fix structural errors before running status. State warnings, which approvals became stale, and the next required review.
+1. Read `context.md`, `history/index.json`, all affected current artifacts (including `reference-analysis.md` when present), durable specs, status, and relevant current-conversation instructions. Do not automatically read or inject another production's context.
+2. Run `node videospec/bin/videospec.js snapshot <id> --note "before: <reason and affected files>"` before editing.
+3. Edit the earliest affected artifact and reconcile dependent artifacts. When later conversation material changes the reference scope, start from v6 `evidence.md`, then `brief.md` and script as needed (use the older reference-analysis/topic/retention/research layout only for legacy productions); do not cosmetically edit an unrelated generated draft. If `assets/audio/voice/narration-lock.json` exists, **口播：** text and its scene order are immutable for every script authority: do not change, regenerate, or work around the lock. Use measured durations in `assets/audio/voice/manifest.json` to time v6 storyboard, subtitles, and render without editing the approved script; older scene-based scripts may recalibrate their timecodes. When `context.md` or `script.md` declares `Script authority: user-authoritative` or `user-authored`, never modify the user's viewpoints, claims, conclusions, ordering, intended emotional force, rhetorical wording, or fictional story setup unless the user explicitly requests that exact change; record the precise before/after diff and leave the prior source asset intact. For `user-authored`, limited mechanical clarity edits are allowed only when they do not alter those decisions. A changed judgment, hook, audience promise, or pacing may update the v6 brief retention map and storyboard (legacy retention plan where present), but does not authorize a script rewrite. Never replace history or silently discard a prior decision.
+4. Append operational before/after notes to v6 `activity.md`, then run an `after:` snapshot; update signed `context.md` only when its content decisions actually change, allowing the content approval to become stale. Older productions retain their context ledger. If recording the returned ID modifies the log, take a final snapshot.
+5. Run lint and status. Approval records remain untouched; any changed signed file requires renewed human approval.
 
-Do not silently preserve an approval after its reviewed content changed, and do not record a new approval without an explicit user instruction.
+## Automatic continuation
+
+- Before final-video approval, if a review render exists and `publish.md` is incomplete, automatically create or update the release package with title variants, selected title, three individually composed cover assets in 16:9, 4:3, and 3:4, description, metadata, accessibility text, platform settings, and exactly ten distinct, search-relevant tags. Use `$imagegen` in its built-in generation mode for the covers: make one generation call per ratio, preserve the shared visual concept while adapting each canvas instead of blindly cropping, inspect the result, and move each accepted asset into `<production>/assets/covers/` as `cover-16x9.png`, `cover-4x3.png`, and `cover-3x4.png`. Record the prompt, generator, and final path in `publish.md`. Do not use its CLI fallback unless the user explicitly requests it. Verify that the selected title/cover promise matches the render before asking for final approval. After final approval, do not regenerate routine alternatives; provide the existing package as a compact publication decision brief and stop only for human publication approval.
+- After a real human publication record and authorized platform data are available, complete v6 `learning.md` (or `analytics.md` and `retrospective.md` for older productions) and any evidence-backed standards delta. Do not invent publication results or metrics; absence of authorized data is the only valid reason to wait.
+
+## v6 artifact authority
+
+For templateVersion 6, update `evidence.md` first when source scope or factual support changes, `brief.md` when the selected promise or retention design changes, and `script.md` when narration changes are explicitly authorized. Reconcile dependent storyboard and review artifacts. After publication, write the merged result to `learning.md`; do not create `analytics.md` or `retrospective.md` in a v6 production.

@@ -1,0 +1,18 @@
+{
+  "templateVersion": 4,
+  "artifacts": {
+    "context.md": { "template": "videospec/context", "requiredHeadings": ["## Current review context", "## Confirmed facts and sources", "## Decisions and rationale", "## Risks and unresolved items", "## Change log"], "allowedHeadingPatterns": ["^# Context ledger: .+$"] },
+    "topic.md": { "template": "videospec/topic", "requiredHeadings": ["## Audience problem and opportunity", "## Selected angle", "## Working title and core selling points", "## Alternatives considered", "## Success hypothesis"], "allowedHeadingPatterns": ["^# Topic: .+$"] },
+    "reference-analysis.md": { "template": "videospec/reference-analysis", "requiredHeadings": ["## Reference inputs and requested use", "## Material coverage map", "## Adaptation boundary", "## Verification and attribution plan", "## Open reference decisions"], "allowedHeadingPatterns": ["^# Reference analysis: .+$", "^### Reference R[0-9]{3}$"] },
+    "research.md": { "template": "videospec/research", "requiredHeadings": ["## Research question and scope", "## Evidence log", "## Counterevidence and caveats", "## Visual and example leads", "## Open verification items"], "allowedHeadingPatterns": ["^# Research: .+$", "^### Evidence E[0-9]{3}$"] },
+    "script.md": { "template": "videospec/script", "requiredHeadings": ["## Summary", "## TTS configuration", "## Voice profile"], "allowedHeadingPatterns": ["^# Script: .+$", "^## [0-9]{2,}:[0-9]{2}(?:\\.[0-9]{3})?[–-][0-9]{2,}:[0-9]{2}(?:\\.[0-9]{3})?｜.+$"] },
+    "content-review.md": { "template": "videospec/content-review", "requiredHeadings": ["## Review scope", "## Reference fidelity review", "## Retention and clarity analysis", "## Strict scorecard", "## Likely exit point", "## Fact and risk analysis", "## Required revisions and resolutions", "## Strengths to preserve", "## Reviewer verdict", "## Ready for human content review"], "allowedHeadingPatterns": ["^# AI content review: .+$"] },
+    "storyboard.md": { "template": "videospec/storyboard", "requiredHeadings": ["## Scenes"], "allowedHeadingPatterns": ["^# Storyboard: .+$", "^### Scene S[0-9]{3}$", "^#### (Visual composition|Motion and transition|Audio|Acceptance check)$"] },
+    "materials.md": { "template": "videospec/materials", "requiredHeadings": ["## Assets"], "allowedHeadingPatterns": ["^# Materials plan: .+$", "^### Asset MAT-[0-9]{3}$", "^#### Intended use$"] },
+    "tasks.md": { "template": "videospec/tasks", "requiredHeadings": ["## Pre-production", "## TTS and video build", "## Automated quality control", "## Publication and learning"], "allowedHeadingPatterns": ["^# Production tasks: .+$"] },
+    "review.md": { "template": "videospec/review", "requiredHeadings": ["## Review version", "## Automated checks", "## Findings and resolutions", "## Human final checklist"], "allowedHeadingPatterns": ["^# Automated video review: .+$"] },
+    "publish.md": { "template": "videospec/publish", "requiredHeadings": ["## Platform and schedule", "## Title variants and selected title", "## Cover / thumbnail", "## Description and metadata", "## Ten publication tags", "## Publication checklist"], "allowedHeadingPatterns": ["^# Publication package: .+$"] },
+    "analytics.md": { "template": "videospec/analytics", "requiredHeadings": ["## Measurement window", "## Metrics", "## Segment and retention observations", "## Data quality and limitations"], "allowedHeadingPatterns": ["^# Performance data: .+$"] },
+    "retrospective.md": { "template": "videospec/retrospective", "requiredHeadings": ["## Outcome versus hypothesis", "## What worked", "## What to change", "## Recommended next experiments", "## Durable standards candidates"], "allowedHeadingPatterns": ["^# Retrospective: .+$"] }
+  }
+}

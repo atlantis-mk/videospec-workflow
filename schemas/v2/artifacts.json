@@ -14,7 +14,7 @@
     "script.md": {
       "template": "videospec/script",
       "requiredHeadings": ["## Summary", "## TTS configuration", "## Voice profile"],
-      "allowedHeadingPatterns": ["^# Script: .+$", "^## [0-9]{2,}:[0-9]{2}[–-][0-9]{2,}:[0-9]{2}｜.+$"]
+      "allowedHeadingPatterns": ["^# Script: .+$", "^## [0-9]{2,}:[0-9]{2}(?:\\.[0-9]{3})?[–-][0-9]{2,}:[0-9]{2}(?:\\.[0-9]{3})?｜.+$"]
     },
     "storyboard.md": {
       "template": "videospec/storyboard",

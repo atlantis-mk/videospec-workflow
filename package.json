@@ -1,11 +1,12 @@
 {
   "name": "videospec-workflow",
-  "version": "0.4.5",
+  "version": "0.7.3",
   "description": "An OpenSpec-inspired, specification-driven workflow for AI-assisted video production.",
   "type": "module",
   "files": [
     ".agents/skills/**",
     "bin/**",
+    "scripts/**",
     "src/**",
     "templates/**",
     "schemas/**",

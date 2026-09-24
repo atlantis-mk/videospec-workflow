@@ -1,4 +1,6 @@
+import fs from "node:fs";
 import path from "node:path";
+import readline from "node:readline/promises";
 import {
   approveGate,
   archiveProduction,
@@ -11,6 +13,8 @@ import {
   listProductions,
   nextActions,
   registerDeliverable,
+  saveTtsCredential,
+  snapshotProduction,
   doctorProject,
   syncStandards,
   updateProject,
@@ -44,12 +48,28 @@ function print(value, json = false) {
 }
 
 function help() {
-  return `VideoSpec — specification-driven video production\n\nUsage:\n  videospec init [directory]\n  videospec update [directory]\n  videospec doctor [directory] [--json]\n  videospec new <production-id> [--title <text>] [--type <type>] [--duration <time>] [--aspect <ratio>]\n  videospec list [--json]\n  videospec status <production-id> [--json]\n  videospec lint <production-id> [--json]\n  videospec next <production-id> [--json]\n  videospec approve <production-id> <brief|storyboard|final> --by <name>\n  videospec deliver <production-id> <file> [--label <name>]\n  videospec sync <production-id>\n  videospec validate <production-id> [--json]\n  videospec archive <production-id>\n  videospec --version\n\nWorkflow:\n  proposal → brief → script → storyboard + materials → tasks → render → review → approve → archive\n`;
+  return `VideoSpec — specification-driven video production\n\nUsage:\n  videospec init [directory]\n  videospec update [directory]\n  videospec doctor [directory] [--json]\n  videospec new <production-id> [--title <text>] [--type <type>] [--duration <time>] [--aspect <ratio>]\n  videospec list [--json]\n  videospec status <production-id> [--json]\n  videospec lint <production-id> [--json]\n  videospec next <production-id> [--json]\n  videospec snapshot <production-id> --note <before-or-after change note>\n  videospec approve <production-id> <content|final|publish> --by <name>\n  videospec deliver <production-id> <file> [--label <name>]\n  videospec sync <production-id>\n  videospec validate <production-id> [--json]\n  videospec archive <production-id>\n  videospec --version\n\nWorkflow v6:\n  brief → evidence ledger → script → content review → content approval → storyboard + materials → TTS → video → render review → release package → final approval → publish approval → learning → archive\n`;
 }
 
 function requireArg(value, name) {
   if (!value) throw new Error(`Missing ${name}.`);
   return value;
+}
+
+async function requestTtsKey() {
+  const environmentKey = process.env.VOLCENGINE_TTS_API_KEY?.trim() || process.env.X_API_KEY?.trim();
+  if (environmentKey) return environmentKey;
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    throw new Error("TTS API key is required for initialization. Run interactively or set VOLCENGINE_TTS_API_KEY for this command.");
+  }
+  const terminal = readline.createInterface({ input: process.stdin, output: process.stdout });
+  try {
+    const key = (await terminal.question("Enter Volcengine TTS API key (stored locally with owner-only permissions): ")).trim();
+    if (!key) throw new Error("TTS API key is required for initialization.");
+    return key;
+  } finally {
+    terminal.close();
+  }
 }
 
 export async function main(argv) {
@@ -67,9 +87,18 @@ export async function main(argv) {
   }
 
   if (command === "init") {
-    const result = initProject(args[0] || ".");
+    const target = args[0] || ".";
+    const resolvedTarget = path.resolve(target);
+    const existing = fs.existsSync(path.join(resolvedTarget, "videospec", "config.json"));
+    const credentialExists = fs.existsSync(path.join(resolvedTarget, "videospec", ".secrets", "tts.env"));
+    const ttsKey = credentialExists ? null : await requestTtsKey();
+    const result = initProject(target, { ttsKey });
+    if (existing && ttsKey) saveTtsCredential(result.projectRoot, ttsKey);
+    const retired = result.agentLayer.retiredSkills.length
+      ? `\nRetired skill backup: ${result.agentLayer.retiredSkills.join(", ")}.`
+      : "";
     print(
-      json ? result : `${result.initialized ? "Initialized" : "Updated"} VideoSpec at ${result.root}\nInstalled ${result.agentLayer.skills.length} AI skill(s) in .agents/skills.\n\nNext: open your AI chat and run $videospec-explore or $videospec-propose.`,
+      json ? result : `${result.initialized ? "Initialized" : "Updated"} VideoSpec at ${result.root}\nInstalled ${result.agentLayer.skills.length} AI skill(s) in .agents/skills.${retired}\n\nNext: open your AI chat and run $videospec-explore or $videospec-propose.`,
       json,
     );
     return;
@@ -82,7 +111,10 @@ export async function main(argv) {
       : result.migration?.state === "configured"
         ? `\nConfigured the production root at ${path.relative(result.projectRoot, result.migration.destination)}.`
         : "";
-    print(json ? result : `Updated VideoSpec ${result.version} at ${result.root}\nRefreshed ${result.agentLayer.skills.length} AI skill(s).${migration}`, json);
+    const retired = result.agentLayer.retiredSkills.length
+      ? `\nRetired skill backup: ${result.agentLayer.retiredSkills.join(", ")}.`
+      : "";
+    print(json ? result : `Updated VideoSpec ${result.version} at ${result.root}\nRefreshed ${result.agentLayer.skills.length} AI skill(s).${migration}${retired}`, json);
     return;
   }
 
@@ -132,6 +164,13 @@ export async function main(argv) {
     const id = requireArg(args[0], "production id");
     const actions = nextActions(projectRoot, id);
     print(json ? actions : actions.map((action, index) => `${index + 1}. ${action}`).join("\n"), json);
+    return;
+  }
+
+  if (command === "snapshot") {
+    const id = requireArg(args[0], "production id");
+    const result = snapshotProduction(projectRoot, id, flags.note);
+    print(json ? result : `Saved immutable snapshot ${result.version}: ${result.note}`, json);
     return;
   }
 
