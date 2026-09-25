@@ -169,6 +169,8 @@ test("scaffolds a production and invalidates stale approval", () => {
     .filter((name) => name.startsWith("videospec"));
   assert.equal(installedSkills.length, 8);
   assert.equal(fs.readdirSync(path.join(root, ".agents", "skills")).length, VIDEO_SPEC_SKILLS.length);
+  assert.equal(VIDEO_SPEC_SKILLS.length, 9);
+  assert.equal(fs.existsSync(path.join(root, ".agents", "skills", "finance-video-production")), false);
   assert.equal(fs.existsSync(path.join(root, ".agents", "skills", "videospec-archive")), false);
   const embeddedList = execFileSync(
     process.execPath,
@@ -599,6 +601,9 @@ test("updates generated skills and runtime without changing production files", (
   const formerArchiveSkill = path.join(root, ".agents", "skills", "videospec-archive");
   fs.mkdirSync(formerArchiveSkill, { recursive: true });
   fs.writeFileSync(path.join(formerArchiveSkill, "SKILL.md"), "# User-customized former archive skill\n");
+  const customFinanceSkill = path.join(root, ".agents", "skills", "finance-video-production");
+  fs.mkdirSync(customFinanceSkill, { recursive: true });
+  fs.writeFileSync(path.join(customFinanceSkill, "SKILL.md"), "# User-owned finance skill\n");
 
   const result = updateProject(root);
 
@@ -606,6 +611,7 @@ test("updates generated skills and runtime without changing production files", (
   assert.equal(result.agentLayer.skills.length, VIDEO_SPEC_SKILLS.length);
   assert.deepEqual(result.agentLayer.retiredSkills, ["videospec/retired-skills/videospec-archive"]);
   assert.equal(fs.existsSync(formerArchiveSkill), false);
+  assert.equal(fs.readFileSync(path.join(customFinanceSkill, "SKILL.md"), "utf8"), "# User-owned finance skill\n");
   assert.equal(fs.readFileSync(path.join(root, result.agentLayer.retiredSkills[0], "SKILL.md"), "utf8"), "# User-customized former archive skill\n");
   assert.equal(fs.readFileSync(proposal, "utf8"), "# User-owned proposal\n");
   assert.match(fs.readFileSync(path.join(root, ".agents", "skills", "videospec", "SKILL.md"), "utf8"), /name: videospec/);

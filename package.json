@@ -1,6 +1,6 @@
 {
   "name": "videospec-workflow",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "An OpenSpec-inspired, specification-driven workflow for AI-assisted video production.",
   "type": "module",
   "files": [

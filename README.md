@@ -49,7 +49,6 @@ VideoSpec 提供以下 AI 技能：
 | `$video-script-review` | 按目标时长独立审查脚本，只诊断问题与修改方向 |
 | `$videospec-approve` | 记录内容、成片或发布包的明确人类审批 |
 | `$videospec-apply` | 生成分镜、素材、TTS 与可播放预览，确认后才渲染 |
-| `$finance-video-production` | 中文财经视频的素材、镜头、字幕和预览验收规范 |
 | `$videospec-update` | 带着上下文修改产物，或写入发布数据与复盘结论 |
 | `$videospec-verify` | 自动检查字幕、音画、黑帧、节奏、事实、素材和交付 |
 | `$videospec-sync` | 合并长期制作规范增量 |
@@ -81,7 +80,7 @@ videospec init
 npx videospec-workflow@latest init
 ```
 
-`videospec init` 会把 10 个技能安装到项目的 `.agents/skills/`，并把自包含运行时放到 `videospec/bin/`。此后回到聊天界面使用 `$videospec-propose` 等技能即可。
+`videospec init` 会把 9 个技能安装到项目的 `.agents/skills/`，并把自包含运行时放到 `videospec/bin/`。此后回到聊天界面使用 `$videospec-propose` 等技能即可。`finance-video-production` 是财经工作区自己的技能，不计入通用 VideoSpec 安装；从 0.8.0 升级时，未修改的打包副本会备份到 `videospec/retired-skills/`。
 
 进入制作前，`$videospec-apply` 会确认本期所需的视频渲染器、内置 `$imagegen`、TTS 凭据与 Python 依赖、字幕依赖及音视频检查工具可用。CLI 只检查它能从项目环境观察到的部分；Agent 工具是否可用由技能在当前会话中检查。缺失依赖时记录可恢复的阻塞步骤，不生成替代的虚假产物。
 

@@ -5,10 +5,9 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT_DIR = "videospec";
 export const GATES = ["content", "final", "publish"];
-export const VERSION = "0.8.0";
+export const VERSION = "0.8.1";
 export const TEMPLATE_VERSION = 6;
 export const VIDEO_SPEC_SKILLS = [
-  "finance-video-production",
   "video-script-review",
   "videospec",
   "videospec-apply",
@@ -303,6 +302,17 @@ function sourceSkillNames() {
   return VIDEO_SPEC_SKILLS;
 }
 
+function isBundledFinanceSkillV080(dir) {
+  const expected = {
+    "SKILL.md": "f7be2d74976133df7c695fe2f21bb5b079dc9114153b2c8872bd521cf2cb0175",
+    "agents/openai.yaml": "7235402cfd8fba34eac45cb4bd767a588db346b5a8919bef38d9677ee1aa534d",
+  };
+  if (!fs.statSync(dir).isDirectory()) return false;
+  if (fs.readdirSync(dir).sort().join(",") !== "SKILL.md,agents") return false;
+  if (fs.readdirSync(path.join(dir, "agents")).join(",") !== "openai.yaml") return false;
+  return Object.entries(expected).every(([name, digest]) => fileHash(path.join(dir, name)) === digest);
+}
+
 function assertSkillTargetsAvailable(projectRoot) {
   const source = path.resolve(sourceSkillsDir());
   const targetRoot = path.resolve(projectRoot, ".agents", "skills");
@@ -345,13 +355,14 @@ function installAgentLayer(projectRoot, { replace = false } = {}) {
       fs.cpSync(path.join(source, name), destination, { recursive: true, errorOnExist: true });
     }
     if (replace) {
-      const retired = path.join(target, "videospec-archive");
-      if (fs.existsSync(retired)) {
+      for (const name of ["videospec-archive", "finance-video-production"]) {
+        const retired = path.join(target, name);
+        if (!fs.existsSync(retired) || (name === "finance-video-production" && !isBundledFinanceSkillV080(retired))) continue;
         const backups = path.join(root, "retired-skills");
         fs.mkdirSync(backups, { recursive: true });
-        let destination = path.join(backups, "videospec-archive");
+        let destination = path.join(backups, name);
         for (let suffix = 1; fs.existsSync(destination); suffix += 1) {
-          destination = path.join(backups, `videospec-archive-${suffix}`);
+          destination = path.join(backups, `${name}-${suffix}`);
         }
         fs.renameSync(retired, destination);
         retiredSkills.push(path.relative(projectRoot, destination));
