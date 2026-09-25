@@ -19,7 +19,7 @@ productionId: {{production.id}}
 - [ ] Generate full TTS; retain raw segments and apply per-scene 75 Hz high-pass, gentle de-essing, 2.5:1 compression, and -1.5 dB safety limiting
 - [ ] Merge processed scenes in script order; use two-pass EBU R128 mastering for a mono 48 kHz / 24-bit `narration.wav` at -16 LUFS, 6 LU LRA, and -1.5 dBTP
 - [ ] Recalibrate script scene timecodes from the measured processed voice durations; reconcile storyboard and other timing-only production artifacts without changing **口播：**
-- [ ] Export subtitles from the merged narration and build scenes, captions, and sound mix using only that merged file; master the final stereo video mix to -14 LUFS and -1.0 dBTP
+- [ ] Export timed ASR subtitles once from the merged narration and retain the raw SRT and recognition record; when wording is locked, correct the raw SRT against the canonical script without rerunning ASR, then build scenes, captions, and sound mix using only that merged file; master the final stereo video mix to -14 LUFS and -1.0 dBTP
 - [ ] Render a review version, register it, and automatically trigger audience-critic and technical QA
 
 ## Automated quality control

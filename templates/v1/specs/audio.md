@@ -15,6 +15,15 @@ The production SHALL keep narration understandable and prevent music or effects 
 - **WHEN** the production reaches final review
 - **THEN** a human reviewer SHALL confirm this standard
 
+### Standard: Subtitle timing follows final narration
+
+For narrated or captioned productions, the production SHALL derive and human-correct subtitle timing from the final narration audio. If narration, speech rate, pauses, or subtitle segmentation changes, dependent semantic timing anchors SHALL be regenerated rather than patched from estimates.
+
+#### Check: Acceptance
+
+- **WHEN** the production reaches pre-render review
+- **THEN** the subtitle timeline SHALL match the final audio and every semantic trigger word SHALL have a cue boundary or reliable word-level timestamp
+
 ### Standard: Narration uses a non-destructive, controlled voice master
 
 The production SHALL retain raw TTS or recorded segments. It SHALL process each scene with a 75 Hz high-pass filter, gentle de-essing, 2.5:1 speech compression, and a -1.5 dB safety limiter, then merge the scenes in approved script order. The resulting narration master SHALL be mono 48 kHz / 24-bit PCM WAV, calibrated with two-pass EBU R128 processing to -16 LUFS integrated loudness, 6 LU loudness range, and no more than -1.5 dBTP true peak. The video build SHALL use this merged master rather than a raw scene fragment.

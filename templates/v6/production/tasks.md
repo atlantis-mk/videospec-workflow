@@ -20,12 +20,28 @@ This is a machine-maintained execution checklist. It is not the source of truth 
 - [ ] Lock every **口播：** block and its scene order before the first non-dry-run TTS request
 - [ ] Generate the full TTS master with the approved per-scene processing and loudness targets
 - [ ] Recalibrate timing from measured processed voice durations without changing narration
-- [ ] Export timed ASR SRT from the merged narration, then correct wording with `export_subtitles.py --canonical-script <production>/script.md`; render a review version and register it
+- [ ] Export timed ASR SRT from the merged narration, then correct wording with `export_subtitles.py --canonical-script <production>/script.md`
+- [ ] Build delivery subtitles on one dedicated caption track from corrected text and reliable word times; inspect phrase grouping, exits, safe zones, and bundled fonts
+- [ ] Build a playable preview and record its composition, subtitle, narration, and local media hashes
+
+**Pre-render preview QA:**
+
+- [ ] Run the renderer's runtime, layout, motion, and contrast checks; inspect representative frames at mobile size
+- [ ] Compare corrected subtitles and semantic visual anchors with the locked narration and reliable word times
+- [ ] Check caption behavior during both seeking and continuous playback
+- [ ] Audit the full timeline for gaps, black or empty frames, overlong stills, and video source duration and handoffs
+- [ ] Record passing results and the exact preview input version before requesting render confirmation
+
+**Render gate:**
+
+- [ ] Obtain explicit human confirmation of the current playable preview in `render-authorization.json`
+- [ ] Run `python3 videospec/scripts/check_render_authorization.py <production>` immediately before every video render or export
+- [ ] Render the confirmed version and register the review deliverable
 
 ## Automated quality control
 
-- [ ] Check subtitles, audio-video sync, black frames, timing, pacing, facts, sources, rights, privacy, and visual mapping
-- [ ] Run the audience-critic review and fix/re-check findings within the approved scope
+- [ ] Confirm the encoded file matches the checked preview; probe sync, black frames, loudness, streams, captions, and footage motion
+- [ ] Run the audience-critic review and fix/re-check findings within the approved scope; renew preview confirmation before any re-render after input changes
 
 ## Publication and learning
 

@@ -1,0 +1,3 @@
+interface:
+  display_name: "财经视频制作"
+  short_description: "制作中文财经视频，并在确认预览后渲染"

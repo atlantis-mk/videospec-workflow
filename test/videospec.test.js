@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -42,6 +43,7 @@ function fixture(version = 5) {
 function useVersionTemplates(root, version) {
   const production = loadProduction(root, "demo-video");
   production.metadata.templateVersion = version;
+  if (version < 6) delete production.metadata.artifactContractVersion;
   fs.writeFileSync(production.metadataFile, `${JSON.stringify(production.metadata, null, 2)}\n`);
   const manifest = JSON.parse(fs.readFileSync(path.resolve(`templates/v${version}/manifest.json`), "utf8"));
   const values = {
@@ -60,6 +62,25 @@ function useVersionTemplates(root, version) {
     fs.writeFileSync(file, content);
   }
   return production;
+}
+
+function authorizeRender(production) {
+  const media = path.join(production.dir, "assets", "素材图.png");
+  fs.mkdirSync(path.dirname(media), { recursive: true });
+  fs.writeFileSync(media, "preview media");
+  const hashes = Object.fromEntries(["storyboard.md", "assets/素材图.png"].sort().map((name) => [
+    name, crypto.createHash("sha256").update(fs.readFileSync(path.join(production.dir, name))).digest("hex"),
+  ]));
+  const version = crypto.createHash("sha256").update(JSON.stringify(hashes)).digest("hex");
+  fs.writeFileSync(path.join(production.dir, "render-authorization.json"), JSON.stringify({
+    approved: true,
+    confirmedBy: "Producer",
+    confirmedAt: "2026-09-25T00:00:00Z",
+    previewUrl: "http://localhost:3000/preview",
+    preRenderQa: { passed: true, record: "tasks.md" },
+    inputsSha256: hashes,
+    previewVersionSha256: version,
+  }, null, 2));
 }
 
 function complete(file) {
@@ -147,7 +168,7 @@ test("scaffolds a production and invalidates stale approval", () => {
   const installedSkills = fs.readdirSync(path.join(root, ".agents", "skills"))
     .filter((name) => name.startsWith("videospec"));
   assert.equal(installedSkills.length, 8);
-  assert.equal(fs.readdirSync(path.join(root, ".agents", "skills")).length, 9);
+  assert.equal(fs.readdirSync(path.join(root, ".agents", "skills")).length, VIDEO_SPEC_SKILLS.length);
   assert.equal(fs.existsSync(path.join(root, ".agents", "skills", "videospec-archive")), false);
   const embeddedList = execFileSync(
     process.execPath,
@@ -292,6 +313,9 @@ test("v6 signs covers and keeps registered deliverables inside the archive", () 
   approveGate(root, "demo-video", "content", "Producer");
   const externalRender = path.join(root, "external-render.mp4");
   fs.writeFileSync(externalRender, "approved video bytes");
+  assert.throws(() => registerDeliverable(root, "demo-video", externalRender, "master"), /render confirmation/);
+  authorizeRender(production);
+  execFileSync("python3", [path.join(root, "videospec", "scripts", "check_render_authorization.py"), production.dir]);
   const item = registerDeliverable(root, "demo-video", externalRender, "master");
   assert.equal(path.isAbsolute(item.path), false);
   assert.equal(fs.existsSync(path.join(production.dir, item.path)), true);
@@ -299,6 +323,9 @@ test("v6 signs covers and keeps registered deliverables inside the archive", () 
   const replacement = registerDeliverable(root, "demo-video", externalRender, "master");
   assert.notEqual(replacement.path, item.path);
   assert.equal(fs.readFileSync(path.join(production.dir, item.path), "utf8"), "approved video bytes");
+  fs.appendFileSync(path.join(production.dir, "storyboard.md"), "\nChanged after preview.\n");
+  assert.throws(() => registerDeliverable(root, "demo-video", externalRender, "changed"), /Preview input changed/);
+  authorizeRender(production);
   assert.throws(() => approveGate(root, "demo-video", "final", "Editor"), /cover-16x9.png/);
   assert.equal(getStatus(root, "demo-video").artifacts.publish.state, "draft");
 
@@ -576,7 +603,7 @@ test("updates generated skills and runtime without changing production files", (
   const result = updateProject(root);
 
   assert.equal(result.version, VERSION);
-  assert.equal(result.agentLayer.skills.length, 9);
+  assert.equal(result.agentLayer.skills.length, VIDEO_SPEC_SKILLS.length);
   assert.deepEqual(result.agentLayer.retiredSkills, ["videospec/retired-skills/videospec-archive"]);
   assert.equal(fs.existsSync(formerArchiveSkill), false);
   assert.equal(fs.readFileSync(path.join(root, result.agentLayer.retiredSkills[0], "SKILL.md"), "utf8"), "# User-customized former archive skill\n");

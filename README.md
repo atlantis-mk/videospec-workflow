@@ -7,7 +7,7 @@ VideoSpec 是一套受 [OpenSpec](https://openspec.dev/docs/overview) 启发的�
 - `videospec/specs/` 是栏目、品牌和交付标准的长期真相源。
 - `<productionRoot>/<id>/` 是一期视频的完整工作单元；新项目默认的 `productionRoot` 为项目根目录下的 `productions/`。
 - 选题、调研、脚本、分镜、素材、制作、发布和复盘是可迭代的依赖关系，不是僵硬瀑布阶段。
-- 内容、最终成片、发布包保留三道人类审批；AI 不得代替人类发布或伪造平台数据。
+- 内容、最终成片、发布包保留三道人类审批；渲染前还须由人明确确认当前可播放预览。AI 不得代替人类发布或伪造平台数据。
 - 每次 AI 修改都保存同一期 production 的修改前/后快照；v6 的 `context.md` 保存需内容审批的决策，`activity.md` 保存审批后的时间、制作、QA 与发布包操作，历史永不删除。
 - 审批绑定文件 SHA-256；审批后修改文件会自动显示为过期。
 - 一期视频产生的长期规则变化，通过 standards delta 回写到主规范。
@@ -26,7 +26,7 @@ $videospec-approve 我批准 pilot 的内容包，审批人是 Atlan
 
 $videospec-apply 按已批准方案制作 pilot，使用 HyperFrames
 
-$videospec-update 把第三幕的画面压缩两秒，按已锁口播的实测时长调整分镜并重新渲染
+$videospec-update 把第三幕的画面压缩两秒，按已锁口播的实测时长更新预览，重新确认后渲染
 
 $videospec-verify 检查 pilot 的成片是否符合脚本、分镜和交付规范
 
@@ -48,7 +48,8 @@ VideoSpec 提供以下 AI 技能：
 | `$videospec-propose` | 创建上下文、选题决定、留存地图、调研、脚本与 AI 内容审稿包 |
 | `$video-script-review` | 按目标时长独立审查脚本，只诊断问题与修改方向 |
 | `$videospec-approve` | 记录内容、成片或发布包的明确人类审批 |
-| `$videospec-apply` | 生成分镜、素材、TTS、视频与可审片渲染 |
+| `$videospec-apply` | 生成分镜、素材、TTS 与可播放预览，确认后才渲染 |
+| `$finance-video-production` | 中文财经视频的素材、镜头、字幕和预览验收规范 |
 | `$videospec-update` | 带着上下文修改产物，或写入发布数据与复盘结论 |
 | `$videospec-verify` | 自动检查字幕、音画、黑帧、节奏、事实、素材和交付 |
 | `$videospec-sync` | 合并长期制作规范增量 |
@@ -56,20 +57,14 @@ VideoSpec 提供以下 AI 技能：
 ## 工作流
 
 ```text
-当前对话 / 参考材料梳理 → brief.md（选题与留存）→ evidence.md（来源与调研）→ script.md（连续口播）→ content-review.md → AI 修订 / 复审
-                                  ↓
-                           人工把关 ①：内容
-                                  ↓
-AI 自媒体导演分镜 → AI 素材 → AI TTS → AI 制作视频 → AI 观众代理审片 + 技术 QA → AI 自动修复 / 复检 → AI 标题 / ImageGen 三版封面（16:9、4:3、3:4）/ 简介 / 10 个标签 / 平台草稿
-                                                  ↓
-                                           人工把关 ②：成片
-                                                  ↓
-人工把关 ③：发布 → 人工发布
-                                                  ↓
-                         AI 读取已授权数据 → learning.md → 自动同步明确长期规范 → 自动归档
+对话 / 参考材料 → brief.md → evidence.md → script.md → 内容审稿 → 人工内容审批
+→ 分镜 + 素材 + TTS → 可播放预览 + 渲染前 QA → 人工确认当前预览
+→ 渲染 + 成片 QA → 标题 / 三版封面 / 简介 / 标签 / 平台草稿
+→ 人工成片审批 → 人工发布审批 → 人工发布
+→ 授权数据 + learning.md → 长期规范同步 → 归档
 ```
 
-三道人审是人为决策点；缺少实际制作所需的外部能力或授权数据，或限定次数后仍有阻塞性 QA 失败时，流程会记录原因并暂停。当前对话中此前已经确认的用户要求、附件、链接、参考稿、讨论结论和后续补充都属于同一期的内容输入；它们会写入 v6 的 `evidence.md`（旧版 production 仍使用原有文件），不会要求用户重复说明。已完成且仍适用的选题探索会直接复用；用户已确定方向或提供受保护脚本时，不再强制生成一组竞争选题。只有其他 production 的工作上下文不会自动带入。只要存在相关对话文本，流程就按文本和讨论生成：用户目标、决策和修正使用 `conversation`，附带稿件或素材使用 `extract`，要求重新表达同一内容使用 `adapt`；不存在“灵感创作”或脱离上下文直接换题的路径。每项实质内容必须保留、改写或明确说明省略理由，并映射到口播或分镜；不允许借“原创”或版权谨慎之名替换成另一个选题。审稿或 QA 发现的可修复问题会自动回到最早受影响的产物，修复后重新审查；同一 QA 问题最多自动修复并复检两次，一次 QA 运行最多三轮，仍失败的原因和风险会留在 `review.md`。若改变已审批内容，则审批自动失效并仅回到对应人工关卡。平台数据仅在已授权且实际可用时读取，AI 不会编造指标、发布事实或来源。每次修改都先保存 `history/V###` 的前态，完成后保存后态；v6 的日常操作差异写入 `activity.md`，内容决策变动才更新已签名的 `context.md` 并使内容审批过期。历史不会覆盖或删除。只有明确同步的可泛化规则会进入长期规范，上一期的工作上下文不会自动带入下一期。
+三道内容与发布审批以及单独的预览渲染确认都是人为决策点；缺少实际制作所需的外部能力或授权数据，或限定次数后仍有阻塞性 QA 失败时，流程会记录原因并暂停。当前对话中此前已经确认的用户要求、附件、链接、参考稿、讨论结论和后续补充都属于同一期的内容输入；它们会写入 v6 的 `evidence.md`（旧版 production 仍使用原有文件），不会要求用户重复说明。已完成且仍适用的选题探索会直接复用；用户已确定方向或提供受保护脚本时，不再强制生成一组竞争选题。只有其他 production 的工作上下文不会自动带入。只要存在相关对话文本，流程就按文本和讨论生成：用户目标、决策和修正使用 `conversation`，附带稿件或素材使用 `extract`，要求重新表达同一内容使用 `adapt`；不存在“灵感创作”或脱离上下文直接换题的路径。每项实质内容必须保留、改写或明确说明省略理由，并映射到口播或分镜；不允许借“原创”或版权谨慎之名替换成另一个选题。审稿或 QA 发现的可修复问题会自动回到最早受影响的产物，修复后重新审查；同一 QA 问题最多自动修复并复检两次，一次 QA 运行最多三轮，仍失败的原因和风险会留在 `review.md`。若改变已审批内容，则审批自动失效并仅回到对应人工关卡。平台数据仅在已授权且实际可用时读取，AI 不会编造指标、发布事实或来源。每次修改都先保存 `history/V###` 的前态，完成后保存后态；v6 的日常操作差异写入 `activity.md`，内容决策变动才更新已签名的 `context.md` 并使内容审批过期。历史不会覆盖或删除。只有明确同步的可泛化规则会进入长期规范，上一期的工作上下文不会自动带入下一期。
 
 ## 安装与初始化
 
@@ -86,7 +81,7 @@ videospec init
 npx videospec-workflow@latest init
 ```
 
-`videospec init` 会把 9 个技能安装到项目的 `.agents/skills/`，并把自包含运行时放到 `videospec/bin/`。此后回到聊天界面使用 `$videospec-propose` 等技能即可。
+`videospec init` 会把 10 个技能安装到项目的 `.agents/skills/`，并把自包含运行时放到 `videospec/bin/`。此后回到聊天界面使用 `$videospec-propose` 等技能即可。
 
 进入制作前，`$videospec-apply` 会确认本期所需的视频渲染器、内置 `$imagegen`、TTS 凭据与 Python 依赖、字幕依赖及音视频检查工具可用。CLI 只检查它能从项目环境观察到的部分；Agent 工具是否可用由技能在当前会话中检查。缺失依赖时记录可恢复的阻塞步骤，不生成替代的虚假产物。
 
@@ -129,7 +124,7 @@ python3 videospec/scripts/export_subtitles.py \
 $videospec-verify 检查 <production-id> 的字幕/口播与效果、标签、卡片和画面是否按时间线同步；把检查结果和修复项写入 review.md
 ```
 
-Agent 会自行比对最终渲染时间线，检查每个相关视觉元素的映射、起始时间和结束时机，并将结果记录到 `review.md` 的 `Automated checks` 或 `Findings and resolutions`。发现错位时，先用 `$videospec-update` 修正脚本或分镜并重新渲染，再运行一次验证；这一项不会由 Agent 代替任何人类审批。
+Agent 会自行比对最终渲染时间线，检查每个相关视觉元素的映射、起始时间和结束时机，并将结果记录到 `review.md` 的 `Automated checks` 或 `Findings and resolutions`。发现错位时，先用 `$videospec-update` 修正分镜并更新预览；再次确认当前预览后重新渲染，再运行验证；这一项不会由 Agent 代替任何人类审批。
 
 已初始化的旧项目先升级并刷新 Agent 层：
 
@@ -233,6 +228,9 @@ videospec snapshot ai-video-workflow --note "before: revise opening hook"
 # 人工确认选题、调研、脚本与 AI 审稿
 videospec approve ai-video-workflow content --by "制作人姓名"
 
+# 当前预览通过检查并由人明确确认后，先核验授权
+python3 videospec/scripts/check_render_authorization.py productions/ai-video-workflow
+
 # 注册 HyperFrames 或其他工具生成的成片
 videospec deliver ai-video-workflow ./output/final.mp4 --label master-16x9
 
@@ -259,6 +257,8 @@ videospec validate ai-video-workflow --json
 ## 版本化模板与格式校验
 
 新 production 会记录独立的 `templateVersion`。Markdown frontmatter、固定标题、标题顺序和字段名都属于模板契约；脚本、分镜和素材使用可重复的固定块，并通过 `S001`、`MAT-001` 等 ID 关联。v1–v5 保留用于复现旧 production，v6 是当前默认模板。
+
+v0.8.0 起新建的 v6 production 使用 `artifactContractVersion: 3`：`render-authorization.json` 初始为 `approved: false`。制作方在 `tasks.md` 记录预览 QA，并在授权记录中填入可播放预览地址、通过的 QA、预览使用的本地文件 SHA-256 和由这些哈希计算的版本值。用户明确确认当前预览后才记录确认人和时间；渲染前运行 `check_render_authorization.py`，`videospec deliver` 和最终成片审批也会拒绝缺失或过期的授权。修改画面、时间线、字幕、声音或素材后须重做预览与确认。旧 v6 production 的契约保持兼容。
 
 v6 将选题和留存设计归入 `brief.md`、参考覆盖和调研归入 `evidence.md`，发布后的分析归入 `learning.md`；`script.md` 使用整篇连续口播，由分镜承担场景划分。证据条目映射到留存 beat，beat 以原文短句锚定口播，分镜再映射到 beat、素材映射到分镜场景。v5 在内容审批前增加 `retention-plan.md`：先写角度池与核心判断，再把每个 `B001` 留存 beat 映射至真实脚本场景。每个 beat 都必须说明观众状态、叙事动作、开放问题或 payoff、新价值，以及有叙事理由的视听变化。它不强制剪辑频率；目标是避免“文章朗读式”视频。v5 脚本要求每一幕说明观众状态、叙事动作和推进的 open loop/payoff；分镜要求视觉模式和注意力任务；最终 `review.md` 则额外保留时间码化的 Audience Critic 审片，作为待平台数据验证的编辑假设，不冒充真实留存数据。
 

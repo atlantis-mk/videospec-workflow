@@ -15,14 +15,14 @@ The production SHALL keep essential text within safe areas and readable at the t
 - **WHEN** the production reaches final review
 - **THEN** a human reviewer SHALL confirm this standard
 
-### Standard: Caption-linked visuals are timeline-synchronized
+### Standard: Semantic visuals do not precede spoken anchors
 
-When timed captions or narration-to-caption references are used, each semantic visual element—such as an effect, label, card, illustrative image, or footage—SHALL be mapped to the relevant caption or narration segment in the storyboard timeline. The element SHALL first appear no earlier than the start of that corresponding spoken or captioned content, and SHALL not remain visible after the content becomes misleading or unrelated.
+For narrated or captioned productions, every information-bearing visual, label, number, answer, result, media cue, match cut, emphasis animation, and semantic SFX SHALL begin at or after its corresponding keyword in the human-corrected subtitle timeline. Neutral backgrounds, continuous ambience, non-semantic decoration, and BGM MAY span anchors only when they do not reveal upcoming information. A semantic element SHALL not remain visible after its content becomes misleading or unrelated.
 
-#### Check: Agent caption-to-visual timing verification
+#### Check: Anchor timing verification
 
-- **WHEN** the agent prepares the final render for handoff
-- **THEN** the agent SHALL compare the timed captions or narration against the rendered timeline, verify every semantic visual element has a corresponding timeline entry and begins at or after its related content begins, and record any mismatch and its resolution in the review artifact
+- **WHEN** the agent prepares the playable preview and the final render for handoff
+- **THEN** the agent SHALL inspect the frame before, at, and after each semantic anchor, record any mismatch and its resolution, and reach zero early-reveal violations
 
 ### Standard: Stock B-roll has traceable licensing and use restrictions
 

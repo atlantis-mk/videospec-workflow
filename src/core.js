@@ -5,9 +5,10 @@ import { fileURLToPath } from "node:url";
 
 export const ROOT_DIR = "videospec";
 export const GATES = ["content", "final", "publish"];
-export const VERSION = "0.7.3";
+export const VERSION = "0.8.0";
 export const TEMPLATE_VERSION = 6;
 export const VIDEO_SPEC_SKILLS = [
+  "finance-video-production",
   "video-script-review",
   "videospec",
   "videospec-apply",
@@ -135,7 +136,10 @@ function gateFilesFor(metadata, gate) {
     : metadata.templateVersion >= 4
     ? V4_GATE_FILES
     : metadata.templateVersion >= 3 ? V3_GATE_FILES : LEGACY_GATE_FILES;
-  return files[gate];
+  const selected = files[gate];
+  return metadata.artifactContractVersion >= 3 && gate === "final"
+    ? [...selected, "render-authorization.json"]
+    : selected;
 }
 
 function now() {
@@ -528,7 +532,7 @@ export function createProduction(projectRoot, id, options = {}) {
   const metadata = {
     schemaVersion: 1,
     templateVersion: TEMPLATE_VERSION,
-    ...(TEMPLATE_VERSION >= 6 ? { artifactContractVersion: 2 } : {}),
+    ...(TEMPLATE_VERSION >= 6 ? { artifactContractVersion: 3 } : {}),
     id,
     title: options.title || id,
     type: options.type || "general-video",
@@ -560,6 +564,7 @@ function snapshotFiles(metadata) {
     "production.json",
     ...Object.values(artifactsFor(metadata)),
     ...(metadata.templateVersion >= 6 ? ["activity.md"] : []),
+    ...(metadata.artifactContractVersion >= 3 ? ["render-authorization.json"] : []),
     ...(metadata.templateVersion >= 6 ? V6_COVERS : []),
     "deliverables.json",
     ...(metadata.templateVersion >= 3 ? ["publication.json"] : []),
@@ -612,9 +617,9 @@ VideoSpec is the agreement layer for this video project.
 
 ## Workflow
 
-conversation/reference triage → brief → evidence ledger → script → editorial opposition + duration-aware strict AI review → automatic fix/re-review → human content approval → storyboard + materials → TTS/video → bounded automated QA and fix/re-render loop → publication package → human final approval → human publish approval → human publication record → learning → standards sync → archive
+conversation/reference triage → brief → evidence ledger → script → editorial opposition + duration-aware strict AI review → automatic fix/re-review → human content approval → storyboard + materials → TTS → playable preview + pre-render QA → explicit human confirmation of the current preview → render + encoded-master QA → fixes and renewed preview confirmation before re-render → publication package → human final approval → human publish approval → human publication record → learning → standards sync → archive
 
-Automatically continue every consecutive non-human phase; do not request intermediate AI-work approval. Reuse a matching exploration handoff rather than repeating angle search, and respect a user-selected direction or protected script. Before costly production work, check the required renderer, built-in imagegen, TTS, subtitle, and inspection capabilities. Run lint after edits. AI never invents facts, rights, approvals, publication results, or platform data. Human gates are content, final video, and publication. Also stop for a genuinely unavailable external dependency or a blocking QA failure after bounded attempts. For QA, try at most two repairs per finding and three repair rounds per run; record the attempts and remaining risk. Never present a missing render or failed essential technical/rights check as ready for final approval.
+Automatically continue every consecutive non-human phase; do not request intermediate AI-work approval. Reuse a matching exploration handoff rather than repeating angle search, and respect a user-selected direction or protected script. Before costly production work, check the required renderer, built-in imagegen, TTS, subtitle, and inspection capabilities. Run lint after edits. AI never invents facts, rights, approvals, publication results, or platform data. Human gates are content, confirmation of the current playable preview before rendering, final video, and publication. Before each render or export, verify render-authorization.json and the current input hashes; changed inputs require a new preview and confirmation. Also stop for a genuinely unavailable external dependency or a blocking QA failure after bounded attempts. For QA, try at most two repairs per finding and three repair rounds per run; record the attempts and remaining risk. Never present a missing render or failed essential technical/rights check as ready for final approval.
 
 For v6 narration, leave approved script files unchanged and record measured timing in the voice manifest. Retain raw segments and use only the merged mono 48 kHz / 24-bit voice master (-16 LUFS, 6 LU LRA, -1.5 dBTP). After music and effects are mixed, require final-mix QA against stereo 48 kHz, -14 LUFS, and -1.0 dBTP. Generate the three publication covers with the imagegen skill in built-in mode in separate calls, store accepted 16:9, 4:3, and 3:4 assets in the production, and record prompt/provenance in publish.md.
 
@@ -634,6 +639,38 @@ For v6, \`brief.md\` owns topic, selected promise and retention design; \`eviden
 
 function fileHash(file) {
   return crypto.createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+}
+
+function renderAuthorizationIssues(dir) {
+  const file = path.join(dir, "render-authorization.json");
+  if (!fs.existsSync(file)) return ["Missing render-authorization.json."];
+  let record;
+  try { record = readJson(file); } catch { return ["render-authorization.json is not valid JSON."]; }
+  if (!record || typeof record !== "object" || record.approved !== true || !record.confirmedBy || !record.confirmedAt) {
+    return ["Current preview has no explicit human render confirmation."];
+  }
+  if (!record.previewUrl || record.preRenderQa?.passed !== true) {
+    return ["Playable preview or passing pre-render QA is missing."];
+  }
+  const expected = record.inputsSha256;
+  if (!expected || typeof expected !== "object" || Array.isArray(expected) || !Object.keys(expected).length) {
+    return ["Render authorization has no preview input hashes."];
+  }
+  const actual = {};
+  const root = fs.realpathSync(dir);
+  for (const name of Object.keys(expected).sort()) {
+    const candidate = path.resolve(root, name);
+    if (!candidate.startsWith(`${root}${path.sep}`) || !fs.existsSync(candidate) || !fs.statSync(candidate).isFile()
+      || !fs.realpathSync(candidate).startsWith(`${root}${path.sep}`)) {
+      return [`Preview input missing or outside production: ${name}`];
+    }
+    const digest = fileHash(candidate);
+    if (digest !== expected[name]) return [`Preview input changed since confirmation: ${name}`];
+    actual[name] = digest;
+  }
+  const version = crypto.createHash("sha256").update(JSON.stringify(actual)).digest("hex");
+  if (version !== record.previewVersionSha256) return ["Preview version changed since confirmation."];
+  return [];
 }
 
 function hashGateFiles(dir, metadata, gate) {
@@ -1416,6 +1453,7 @@ function gateIssues(dir, metadata, gate, { prerequisites = true } = {}) {
   if (gate === "final" || (gate === "publish" && metadata.templateVersion >= 6)) {
     issues.push(...deliverableIssues(dir));
   }
+  if (gate === "final" && metadata.artifactContractVersion >= 3) issues.push(...renderAuthorizationIssues(dir));
   if (metadata.templateVersion >= 6 && gate === "content") issues.push(...v6ContentMappings(dir, { strict: metadata.artifactContractVersion >= 2 }).issues);
   if (metadata.templateVersion >= 6 && gate === "final") issues.push(...v6SceneMappings(dir, { requireCoverage: true, strict: metadata.artifactContractVersion >= 2 }));
   if (metadata.templateVersion >= 6 && ["final", "publish"].includes(gate)) {
@@ -1443,6 +1481,9 @@ function approvalIssues(dir, metadata, gate) {
   const issues = stale.map((name) => `Gate '${gate}' is stale because ${name} changed after approval.`);
   if (["final", "publish"].includes(gate)) {
     issues.push(...deliverableIssues(dir).map((issue) => `Gate '${gate}' is stale: ${issue}`));
+  }
+  if (gate === "final" && metadata.artifactContractVersion >= 3) {
+    issues.push(...renderAuthorizationIssues(dir).map((issue) => `Gate '${gate}' is stale: ${issue}`));
   }
   return issues;
 }
@@ -1501,6 +1542,10 @@ export function approveGate(projectRoot, id, gate, by) {
 
 export function registerDeliverable(projectRoot, id, inputPath, label) {
   const production = loadProduction(projectRoot, id);
+  if (production.metadata.artifactContractVersion >= 3) {
+    const issues = renderAuthorizationIssues(production.dir);
+    if (issues.length) throw new Error(`Cannot register rendered video: ${issues.join("; ")}`);
+  }
   const absolute = path.resolve(inputPath);
   if (!fs.existsSync(absolute) || !fs.statSync(absolute).isFile()) {
     throw new Error(`Deliverable file not found: ${absolute}`);
@@ -1601,7 +1646,13 @@ export function nextActions(projectRoot, id) {
     }
     const productionActions = [];
     if (status.artifacts.tasks.state !== "ready") productionActions.push("Complete TTS and video production tasks in tasks.md.");
-    if (status.deliverables.state !== "ready") productionActions.push("Render and register at least one deliverable.");
+    if (status.deliverables.state !== "ready") {
+      if (metadata.artifactContractVersion >= 3 && renderAuthorizationIssues(productionDir(projectRoot, id)).length) {
+        productionActions.push("Build and check a playable preview, obtain explicit confirmation of its current inputs, then render and register a deliverable.");
+      } else {
+        productionActions.push("Render and register at least one deliverable.");
+      }
+    }
     if (productionActions.length) return ["Automatically complete the remaining production work: " + productionActions.join(" ")];
     if (status.artifacts.review.state !== "ready") return ["Automatically complete review.md; auto-fix and re-check findings that stay within approved scope; do not tick human checklist items."];
     if (status.artifacts.publish.state !== "ready") return ["Automatically complete the release package before final approval: selected title, separately composed 16:9/4:3/3:4 covers, description, exactly ten distinct tags, platform settings, and a master-promise check."];

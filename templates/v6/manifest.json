@@ -22,6 +22,7 @@
     "publish.md": "production/publish.md",
     "learning.md": "production/learning.md",
     "publication.json": "../v3/production/publication.json",
+    "render-authorization.json": "production/render-authorization.json",
     "history/README.md": "../v3/production/history-readme.md",
     "deliverables.json": "../v1/production/deliverables.json",
     "specs/README.md": "../v1/production/standards-delta.md",

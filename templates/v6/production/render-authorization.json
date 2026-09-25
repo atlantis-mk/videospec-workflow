@@ -1,0 +1,12 @@
+{
+  "approved": false,
+  "confirmedBy": null,
+  "confirmedAt": null,
+  "previewUrl": null,
+  "preRenderQa": {
+    "passed": false,
+    "record": "tasks.md"
+  },
+  "inputsSha256": {},
+  "previewVersionSha256": null
+}

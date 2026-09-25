@@ -28,7 +28,7 @@ schemas/v1..v6/
 
 `manifest.json` 是目标路径、源模板和允许变量的清单。模板渲染只支持白名单中的简单 `{{production.*}}` 变量；未知变量或缺值立即失败。
 
-新建的 v6 production 在 `production.json` 记录 `artifactContractVersion: 2`，要求证据条目 → brief beat → 原文口播锚点 → 分镜场景 → 素材场景的引用链完整。早期没有该字段的 v6 production 仍按原有 `S###` 引用读取，并在成片关检查这些引用；升级运行时不会改写已审批的内容文件。
+新建的 v6 production 在 `production.json` 记录 `artifactContractVersion: 3`，要求证据条目 → brief beat → 原文口播锚点 → 分镜场景 → 素材场景的引用链完整。新契约还要求当前可播放预览经过 QA 和明确人工渲染确认，记录输入哈希并在成片登记及最终审批时复核。早期没有该字段或仍为版本 2 的 v6 production 仍按原有 `S###` 引用读取，并在成片关检查这些引用；升级运行时不会改写已审批的内容文件。
 
 production 的 `templateVersion` 和数据层 `schemaVersion` 分开演进。更新运行时和模板库不会重写已有 production；没有模板版本的历史 production 作为 legacy 内容继续读取。v1–v5 继续按原结构读取。当前 v6 用 `brief.md` 管理选题与留存设计，用 `evidence.md` 管理参考覆盖与调研，用 `learning.md` 管理发布后分析；脚本是一段连续口播，分镜负责场景划分。
 
