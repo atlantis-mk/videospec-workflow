@@ -12,8 +12,11 @@ productionId: {{production.id}}
 
 ## Automated checks
 
-- [ ] Agent compared timed captions or narration against the final render; every related effect, label, card, and visual starts with or after its corresponding content
-- [ ] Agent checked audio-video sync, clipping, silence, black frames, caption readability, safe areas, and pacing
+- [ ] Agent compared timed captions or narration against the final render; semantic elements follow their anchors, and any intentional opening tease has a documented purpose without early answer or result disclosure
+- [ ] Agent checked audio-video sync, clipping, silence, black frames, caption readability, picture occlusion, layout stability, restrained emphasis, safe areas, and pacing
+- [ ] Agent checked meaningful sound and speaker cues in captions, important distinctions without color alone, and flashing effects against the project visual standard
+- [ ] Agent checked that essential visual information is audible, overlay text contrast holds on difficult frames, and factual graphics retain honest axes, units, period, and source traceability
+- [ ] Agent reviewed information-dense beats in continuous playback and confirmed viewers have time to understand each point before the next arrives
 - [ ] Agent verified voice-master and final-mix loudness targets and the narration lock against the measured voice manifest
 - [ ] Agent verified the selected title, cover copy, description, and platform draft make the same supported viewer promise as the final render
 - [ ] Agent verified the opening begins with a recognisable action/conflict, the early promise is delivered, and handoffs do not become a numbered lecture
@@ -33,4 +36,4 @@ productionId: {{production.id}}
 - [ ] Rights, privacy, attribution, and voice identity verified
 - [ ] Brand and editorial intent approved
 - [ ] Picture, audio, captions, pacing, and delivery inspected
-- [ ] Selected title, 16:9 / 4:3 / 3:4 covers, description, tags, and platform draft inspected against the master
+- [ ] Selected title, project-required covers, description, tags, and platform draft inspected against the master

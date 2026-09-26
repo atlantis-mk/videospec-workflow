@@ -1,12 +1,12 @@
 {
   "templateVersion": 6,
   "projectFiles": {
-    "project.md": "../v3/project.md",
-    "specs/content/spec.md": "../v1/specs/content.md",
-    "specs/creative/spec.md": "../v1/specs/creative.md",
-    "specs/visual/spec.md": "../v1/specs/visual.md",
-    "specs/audio/spec.md": "../v1/specs/audio.md",
-    "specs/delivery/spec.md": "../v1/specs/delivery.md"
+    "project.md": "project.md",
+    "specs/content/spec.md": "specs/content.md",
+    "specs/creative/spec.md": "specs/creative.md",
+    "specs/visual/spec.md": "specs/visual.md",
+    "specs/audio/spec.md": "specs/audio.md",
+    "specs/delivery/spec.md": "specs/delivery.md"
   },
   "productionFiles": {
     "context.md": "production/context.md",
@@ -16,17 +16,23 @@
     "script.md": "production/script.md",
     "content-review.md": "production/content-review.md",
     "storyboard.md": "production/storyboard.md",
-    "materials.md": "../v3/production/materials.md",
+    "materials.md": "production/materials.md",
     "tasks.md": "production/tasks.md",
     "review.md": "production/review.md",
     "publish.md": "production/publish.md",
     "learning.md": "production/learning.md",
-    "publication.json": "../v3/production/publication.json",
+    "publication.json": "production/publication.json",
     "render-authorization.json": "production/render-authorization.json",
-    "history/README.md": "../v3/production/history-readme.md",
-    "deliverables.json": "../v1/production/deliverables.json",
-    "specs/README.md": "../v1/production/standards-delta.md",
-    "renders/.gitkeep": "../v1/production/empty"
+    "history/README.md": "production/history-readme.md",
+    "deliverables.json": "production/deliverables.json",
+    "specs/README.md": "production/standards-delta.md",
+    "renders/.gitkeep": "production/empty"
   },
-  "variables": ["production.id", "production.title", "production.type", "production.duration", "production.aspectRatio"]
+  "variables": [
+    "production.id",
+    "production.title",
+    "production.type",
+    "production.duration",
+    "production.aspectRatio"
+  ]
 }

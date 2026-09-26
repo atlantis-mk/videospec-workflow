@@ -10,7 +10,7 @@
     "materials.md": { "template": "videospec/materials", "requiredHeadings": ["## Assets"], "allowedHeadingPatterns": ["^# Materials plan: .+$", "^### Asset MAT-[0-9]{3}$", "^#### Intended use$"] },
     "tasks.md": { "template": "videospec/tasks", "requiredHeadings": ["## Pre-production", "## TTS and video build", "## Automated quality control", "## Publication and learning"], "allowedHeadingPatterns": ["^# Production tasks: .+$"] },
     "review.md": { "template": "videospec/review", "requiredHeadings": ["## Review version", "## Automated checks", "## Audience critic review", "## Findings and resolutions", "## Human final checklist"], "allowedHeadingPatterns": ["^# Automated video review: .+$"] },
-    "publish.md": { "template": "videospec/publish", "requiredHeadings": ["## Platform and schedule", "## Title variants and selected title", "## Cover / thumbnail", "## Description and metadata", "## Ten publication tags", "## Publication checklist"], "allowedHeadingPatterns": ["^# Publication package: .+$"] },
+    "publish.md": { "template": "videospec/publish", "requiredHeadings": ["## Platform and schedule", "## Title variants and selected title", "## Cover / thumbnail", "## Description and metadata", "## Publication checklist"], "allowedHeadingPatterns": ["^# Publication package: .+$", "^## (Ten publication tags|Publication tags)$"] },
     "learning.md": { "template": "videospec/learning", "requiredHeadings": ["## Publication record and measurement window", "## Raw metrics and data quality", "## Outcome versus brief hypothesis", "## What worked", "## What to change", "## Recommended next experiments", "## Durable standards candidates"], "allowedHeadingPatterns": ["^# Post-publication learning: .+$"] }
   }
 }

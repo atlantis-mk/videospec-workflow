@@ -32,20 +32,6 @@ def normalized_char_positions(value: str) -> tuple[str, list[int]]:
     return "".join(value[index] for index in indices), indices
 
 
-def canonical_srt_text(path: Path) -> str:
-    """Read only displayed subtitle text from a canonical SRT, in cue order."""
-    blocks = re.split(r"\r?\n\r?\n+", path.read_text(encoding="utf-8").strip())
-    lines: list[str] = []
-    for block in blocks:
-        parts = block.splitlines()
-        if len(parts) >= 3 and "-->" in parts[1]:
-            lines.extend(part.strip() for part in parts[2:] if part.strip())
-    text = "".join(lines)
-    if not text:
-        raise SystemExit(f"canonical SRT contains no subtitle text: {path}")
-    return text
-
-
 def blockquote(section: str, label: str) -> str | None:
     marker = re.search(rf"^\*\*{re.escape(label)}：\*\*\s*$", section, re.MULTILINE)
     if not marker:
@@ -63,7 +49,7 @@ def blockquote(section: str, label: str) -> str | None:
 
 
 def canonical_script_text(path: Path) -> str:
-    """Read the single blockquoted **口播：** text from an unsegmented V6 script."""
+    """Read the blockquoted **口播：** text from the current script."""
     content = path.read_text(encoding="utf-8")
     canonical = blockquote(content, "口播") or ""
     if not canonical:
@@ -218,9 +204,7 @@ def main() -> int:
     parser.add_argument("input", type=Path, nargs="?", help="Audio or video file to transcribe")
     parser.add_argument("--output", type=Path, help="SRT output path; defaults beside input")
     parser.add_argument("--json-output", type=Path, help="Raw recognition result JSON")
-    canonical = parser.add_mutually_exclusive_group()
-    canonical.add_argument("--canonical-srt", type=Path, help="Locked script SRT whose wording replaces ASR recognition variants")
-    canonical.add_argument("--canonical-script", type=Path, help="V6 script.md; ordered blockquoted 口播 text replaces ASR wording")
+    parser.add_argument("--canonical-script", type=Path, help="script.md whose blockquoted 口播 text replaces ASR wording")
     parser.add_argument("--correct-srt", type=Path, help="Existing timed ASR SRT to correct without running ASR again")
     parser.add_argument("--language", default="auto", choices=("auto", "zh", "en", "yue", "ja", "ko"))
     parser.add_argument("--device", default="cpu", help="FunASR device, for example cpu or cuda:0")
@@ -271,12 +255,7 @@ def main() -> int:
         cues = sentence_cues(result, rich_transcription_postprocess) or word_cues(result, rich_transcription_postprocess, args.max_chars)
         if not cues:
             raise SystemExit("Paraformer returned no usable timestamps; cannot create an accurate SRT.")
-    if args.canonical_srt:
-        canonical_srt = args.canonical_srt.resolve()
-        if not canonical_srt.is_file():
-            parser.error(f"canonical SRT not found: {canonical_srt}")
-        cues = canonicalize_cues(cues, canonical_srt_text(canonical_srt))
-    elif args.canonical_script:
+    if args.canonical_script:
         canonical_script = args.canonical_script.resolve()
         if not canonical_script.is_file():
             parser.error(f"canonical V6 script not found: {canonical_script}")

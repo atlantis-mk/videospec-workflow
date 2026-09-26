@@ -19,7 +19,7 @@ productionId: {{production.id}}
 
 ## Cover / thumbnail
 
-Create each native-ratio variant separately with `$imagegen` before final-master approval. Inspect and store accepted outputs in `assets/covers/`.
+Create each cover variant declared in the current project delivery spec separately with `$imagegen` before final-master approval. Inspect and store accepted outputs at the declared paths.
 
 | Ratio | Asset or path | Imagegen prompt / generation record | On-cover copy | Composition notes | Review status |
 |---|---|---|---|---|---|
@@ -35,9 +35,9 @@ Create each native-ratio variant separately with `$imagegen` before final-master
 
 <!-- TODO: Description, links, disclosures, chapters, accessibility text, and platform-draft settings. -->
 
-## Ten publication tags
+## Publication tags
 
-Use exactly ten distinct, search-relevant tags.
+Use the number of distinct, search-relevant tags specified in the current project delivery spec.
 
 #标签占位1 #标签占位2 #标签占位3 #标签占位4 #标签占位5 #标签占位6 #标签占位7 #标签占位8 #标签占位9 #标签占位10
 
@@ -45,5 +45,5 @@ Use exactly ten distinct, search-relevant tags.
 
 - [ ] Candidate deliverable selected and promise checked against the review render
 - [ ] Metadata, links, disclosures, and accessibility checked
-- [ ] Exactly ten distinct, search-relevant publication tags selected
+- [ ] The project-required number of distinct, search-relevant publication tags selected
 - [ ] Platform-specific settings and visibility checked

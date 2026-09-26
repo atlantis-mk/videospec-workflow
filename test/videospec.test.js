@@ -27,7 +27,7 @@ import {
   VIDEO_SPEC_SKILLS,
 } from "../src/core.js";
 
-function fixture(version = 5) {
+function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "videospec-"));
   initProject(root);
   createProduction(root, "demo-video", {
@@ -36,39 +36,16 @@ function fixture(version = 5) {
     duration: "60s",
     aspect: "16:9",
   });
-  if (version !== 6) useVersionTemplates(root, version);
   return root;
-}
-
-function useVersionTemplates(root, version) {
-  const production = loadProduction(root, "demo-video");
-  production.metadata.templateVersion = version;
-  if (version < 6) delete production.metadata.artifactContractVersion;
-  fs.writeFileSync(production.metadataFile, `${JSON.stringify(production.metadata, null, 2)}\n`);
-  const manifest = JSON.parse(fs.readFileSync(path.resolve(`templates/v${version}/manifest.json`), "utf8"));
-  const values = {
-    "production.id": production.metadata.id,
-    "production.title": production.metadata.title,
-    "production.type": production.metadata.type,
-    "production.duration": production.metadata.duration,
-    "production.aspectRatio": production.metadata.aspectRatio,
-  };
-  for (const [destination, source] of Object.entries(manifest.productionFiles)) {
-    let content = fs.readFileSync(path.resolve(`templates/v${version}`, source), "utf8");
-    content = content.replace(/\{\{([a-zA-Z0-9.]+)\}\}/g, (_match, key) => values[key]);
-    content = content.replace(/^templateVersion:\s*\d+\s*$/m, `templateVersion: ${version}`);
-    const file = path.join(production.dir, destination);
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, content);
-  }
-  return production;
 }
 
 function authorizeRender(production) {
   const media = path.join(production.dir, "assets", "素材图.png");
   fs.mkdirSync(path.dirname(media), { recursive: true });
   fs.writeFileSync(media, "preview media");
-  const hashes = Object.fromEntries(["storyboard.md", "assets/素材图.png"].sort().map((name) => [
+  const inputs = ["script.md", "storyboard.md", "assets/素材图.png"];
+  if (fs.existsSync(path.join(production.dir, "assets/audio/voice/manifest.json"))) inputs.push("assets/audio/voice/manifest.json");
+  const hashes = Object.fromEntries(inputs.sort().map((name) => [
     name, crypto.createHash("sha256").update(fs.readFileSync(path.join(production.dir, name))).digest("hex"),
   ]));
   const version = crypto.createHash("sha256").update(JSON.stringify(hashes)).digest("hex");
@@ -87,46 +64,21 @@ function complete(file) {
   let content = fs.readFileSync(file, "utf8")
     .replaceAll(/<!-- TODO(?::.*?)? -->/g, "Completed and verified")
     .replaceAll("- [ ]", "- [x]");
-  if (path.basename(file) === "reference-analysis.md") {
-    content = content
-      .replace("- Mode: Completed and verified", "- Mode: conversation")
-      .replace("- Authority: Completed and verified", "- Authority: newly-authored")
-      .replace("- Reference input: Completed and verified", "- Reference input: current conversation")
-      + "\n### Reference R001\n\n- Source locator: current conversation\n- Extracted idea: User's stated video goal\n- Verification: user-provided production scope\n- Adaptation decision: preserve\n- Script coverage: S001\n";
-  }
-  if (path.basename(file) === "retention-plan.md") {
-    content = content
-      .replace("- Script coverage: Completed and verified", "- Script coverage: S001");
-  }
   if (path.basename(file) === "evidence.md") {
     content = content
       .replace("- Disposition: Completed and verified", "- Disposition: preserve")
       .replace("- Brief beat coverage: Completed and verified", "- Brief beat coverage: B001");
   }
-  if (["script.md", "storyboard.md"].includes(path.basename(file))) {
+  if (path.basename(file) === "storyboard.md") {
     content = content.replace("- Time: 00:00.000 - 00:00.000", "- Time: 00:00.000 - 01:00.000");
   }
   if (path.basename(file) === "script.md") {
-    content = content
-      .replace("- Script authority: Completed and verified", "- Script authority: newly-authored")
-      .replace("## 00:00–00:00｜Completed and verified", "## 00:00–01:00｜Completed and verified");
+    content = content.replace("- Script authority: Completed and verified", "- Script authority: newly-authored");
   }
   if (path.basename(file) === "publish.md") {
-    let tagNumber = 0;
-    content = content.replace(/^\d+\. Completed and verified$/gm, () => {
-      tagNumber += 1;
-      return `${tagNumber}. verified-tag-${tagNumber}`;
-    });
     content = content.replace(/#标签占位(\d+)/g, (_match, number) => `#verified-tag-${number}`);
   }
   fs.writeFileSync(file, content);
-}
-
-function useV1Templates(root) {
-  const production = useVersionTemplates(root, 1);
-  production.metadata.approvals = { brief: null, storyboard: null, final: null };
-  fs.writeFileSync(production.metadataFile, `${JSON.stringify(production.metadata, null, 2)}\n`);
-  return production;
 }
 
 test("missing packaged skills fail before initialization or update changes the project", async () => {
@@ -185,23 +137,25 @@ test("scaffolds a production and invalidates stale approval", () => {
   assert.equal(production.dir, path.join(root, "productions", "demo-video"));
   assert.equal(fs.existsSync(path.join(root, "videospec", "productions", "demo-video")), false);
   assert.deepEqual(listProductions(root).map((item) => item.id), ["demo-video"]);
-  assert.equal(production.metadata.templateVersion, 5);
-  assert.equal(fs.existsSync(path.join(production.dir, "retention-plan.md")), true);
-  assert.match(fs.readFileSync(path.join(production.dir, "script.md"), "utf8"), /\*\*合成参数：\*\*[\s\S]*\*\*演绎提示：\*\*/);
-  assert.deepEqual(nextActions(root, "demo-video"), ["Automatically complete the angle slate, retention plan, research, script, editorial opposition, strict AI review, and any fixable review/re-review loop."]);
-  for (const name of ["context.md", "topic.md", "retention-plan.md", "research.md", "script.md", "reference-analysis.md", "content-review.md"]) complete(path.join(production.dir, name));
+  assert.equal(production.metadata.templateVersion, 6);
+  assert.equal(fs.existsSync(path.join(production.dir, "brief.md")), true);
+  assert.equal(fs.existsSync(path.join(production.dir, "evidence.md")), true);
+  assert.match(nextActions(root, "demo-video")[0], /brief, evidence ledger, script/);
+  for (const name of ["context.md", "brief.md", "evidence.md", "script.md", "content-review.md"]) complete(path.join(production.dir, name));
 
   approveGate(root, "demo-video", "content", "Producer");
   assert.equal(getStatus(root, "demo-video").approvals.content.state, "approved");
-
   fs.appendFileSync(path.join(production.dir, "script.md"), "\nChanged after approval.\n");
   assert.equal(getStatus(root, "demo-video").approvals.content.state, "stale");
 });
 
 test("v6 scaffolds consolidated content and post-publication artifacts", () => {
-  const root = fixture(6);
+  const root = fixture();
   const production = loadProduction(root, "demo-video");
   assert.equal(production.metadata.templateVersion, 6);
+  for (const kind of ["templates", "schemas"]) {
+    assert.deepEqual(fs.readdirSync(path.join(root, "videospec", kind)), ["v6"]);
+  }
   for (const name of ["brief.md", "evidence.md", "script.md", "learning.md"]) {
     assert.equal(fs.existsSync(path.join(production.dir, name)), true);
   }
@@ -229,8 +183,47 @@ test("v6 scaffolds consolidated content and post-publication artifacts", () => {
   assert.equal(getStatus(root, "demo-video").approvals.content.state, "stale");
 });
 
+test("publication validation follows the current project delivery profile", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "videospec-delivery-"));
+  initProject(root);
+  const spec = path.join(root, "videospec", "specs", "delivery", "spec.md");
+  fs.writeFileSync(spec, fs.readFileSync(spec, "utf8")
+    .replace('"tagCount": 10', '"tagCount": 3')
+    .replace('    { "ratio": "4:3", "path": "assets/covers/cover-4x3.png" },\n', ""));
+  const production = createProduction(root, "custom-package");
+  const publish = path.join(production.dir, "publish.md");
+  const initial = fs.readFileSync(publish, "utf8");
+  assert.match(initial, /cover-16x9\.png/);
+  assert.doesNotMatch(initial, /cover-4x3\.png/);
+  assert.match(initial, /#标签占位1 #标签占位2 #标签占位3\s/);
+  complete(publish);
+  const coverDir = path.join(production.dir, "assets", "covers");
+  fs.mkdirSync(coverDir, { recursive: true });
+  for (const name of ["cover-16x9.png", "cover-3x4.png"]) fs.writeFileSync(path.join(coverDir, name), name);
+  assert.equal(getStatus(root, "custom-package").artifacts.publish.state, "ready");
+  fs.writeFileSync(publish, fs.readFileSync(publish, "utf8").replace("## Publication tags", "## Ten publication tags"));
+  assert.match(lintProduction(root, "custom-package").issues.join("\n"), /rename the legacy Ten publication tags heading/);
+  fs.writeFileSync(publish, fs.readFileSync(publish, "utf8").replace("## Ten publication tags", "## Publication tags"));
+  fs.writeFileSync(spec, fs.readFileSync(spec, "utf8").replace('"tagCount": 3', '"tagCount": 4'));
+  assert.match(lintProduction(root, "custom-package").issues.join("\n"), /exactly 4 unnumbered/);
+  fs.writeFileSync(spec, "# Delivery Standards\n\n## Standards\n\n### Standard: Deliverables match the target platform\n\nThe production SHALL meet approved requirements.\n");
+  const legacy = createProduction(root, "prior-v6-package");
+  const legacyPublish = fs.readFileSync(path.join(legacy.dir, "publish.md"), "utf8");
+  assert.match(legacyPublish, /cover-4x3\.png/);
+  assert.match(legacyPublish, /#标签占位10/);
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("rejects productions created with removed template versions", () => {
+  const root = fixture();
+  const production = loadProduction(root, "demo-video");
+  production.metadata.templateVersion = 5;
+  fs.writeFileSync(production.metadataFile, `${JSON.stringify(production.metadata, null, 2)}\n`);
+  assert.throws(() => lintProduction(root, "demo-video"), /Only v6 is supported/);
+});
+
 test("v6 operational activity and measured voice timing leave content approval intact", () => {
-  const root = fixture(6);
+  const root = fixture();
   const production = loadProduction(root, "demo-video");
   for (const name of ["context.md", "brief.md", "evidence.md", "script.md", "content-review.md"]) {
     complete(path.join(production.dir, name));
@@ -246,7 +239,7 @@ test("v6 operational activity and measured voice timing leave content approval i
 });
 
 test("v6 validates narration anchors, brief beats, and material scene references", () => {
-  const root = fixture(6);
+  const root = fixture();
   const production = loadProduction(root, "demo-video");
   for (const name of ["brief.md", "evidence.md", "script.md", "storyboard.md", "materials.md"]) {
     complete(path.join(production.dir, name));
@@ -271,7 +264,7 @@ test("v6 validates narration anchors, brief beats, and material scene references
 });
 
 test("early v6 scene mappings remain readable without the new contract marker", () => {
-  const root = fixture(6);
+  const root = fixture();
   const production = loadProduction(root, "demo-video");
   delete production.metadata.artifactContractVersion;
   fs.writeFileSync(production.metadataFile, `${JSON.stringify(production.metadata, null, 2)}\n`);
@@ -290,7 +283,7 @@ test("early v6 scene mappings remain readable without the new contract marker", 
 });
 
 test("update adds an unsigned activity ledger to an existing v6 production", () => {
-  const root = fixture(6);
+  const root = fixture();
   const production = loadProduction(root, "demo-video");
   for (const name of ["context.md", "brief.md", "evidence.md", "script.md", "content-review.md"]) {
     complete(path.join(production.dir, name));
@@ -304,7 +297,7 @@ test("update adds an unsigned activity ledger to an existing v6 production", () 
 });
 
 test("v6 signs covers and keeps registered deliverables inside the archive", () => {
-  const root = fixture(6);
+  const root = fixture();
   const production = loadProduction(root, "demo-video");
   for (const name of ["context.md", "brief.md", "evidence.md", "script.md", "content-review.md", "storyboard.md", "materials.md", "tasks.md", "review.md", "publish.md", "learning.md"]) {
     complete(path.join(production.dir, name));
@@ -350,6 +343,12 @@ test("v6 signs covers and keeps registered deliverables inside the archive", () 
   assert.equal(getStatus(root, "demo-video").approvals.final.state, "stale");
   assert.equal(getStatus(root, "demo-video").approvals.publish.state, "stale");
   fs.writeFileSync(registeredVideo, "new approved video bytes");
+  const deliverySpec = path.join(root, "videospec", "specs", "delivery", "spec.md");
+  const originalDeliverySpec = fs.readFileSync(deliverySpec, "utf8");
+  fs.writeFileSync(deliverySpec, `${originalDeliverySpec}\nUpdated packaging guidance.\n`);
+  assert.equal(getStatus(root, "demo-video").approvals.final.state, "stale");
+  assert.equal(getStatus(root, "demo-video").approvals.publish.state, "stale");
+  fs.writeFileSync(deliverySpec, originalDeliverySpec);
   fs.writeFileSync(path.join(production.dir, "publication.json"), JSON.stringify({ published: true }));
   assert.deepEqual(validateProduction(root, "demo-video"), { valid: true, issues: [] });
   const archived = archiveProduction(root, "demo-video");
@@ -360,70 +359,42 @@ test("v6 signs covers and keeps registered deliverables inside the archive", () 
   assert.equal(fs.existsSync(path.join(archived, "assets", "covers", "cover-16x9.png")), true);
 });
 
+test("changed project audio standards invalidate an authorized preview", () => {
+  const root = fixture();
+  const production = loadProduction(root, "demo-video");
+  const audioSpec = path.join(root, "videospec", "specs", "audio", "spec.md");
+  const voiceManifest = path.join(production.dir, "assets", "audio", "voice", "manifest.json");
+  fs.mkdirSync(path.dirname(voiceManifest), { recursive: true });
+  fs.writeFileSync(voiceManifest, JSON.stringify({
+    audioProfileSource: { sha256: crypto.createHash("sha256").update(fs.readFileSync(audioSpec)).digest("hex") },
+  }));
+  authorizeRender(production);
+  const checker = path.join(root, "videospec", "scripts", "check_render_authorization.py");
+  execFileSync("python3", [checker, production.dir]);
+  const script = path.join(production.dir, "script.md");
+  const approvedScript = fs.readFileSync(script, "utf8");
+  fs.appendFileSync(script, "\nRevised narration.\n");
+  assert.throws(() => execFileSync("python3", [checker, production.dir], { stdio: "pipe" }), /preview input changed since confirmation: script.md/);
+  fs.writeFileSync(script, approvedScript);
+  fs.appendFileSync(audioSpec, "\nUpdated project audio target.\n");
+  assert.throws(() => execFileSync("python3", [checker, production.dir], { stdio: "pipe" }), /project audio profile changed/);
+  const render = path.join(production.dir, "renders", "master.mp4");
+  fs.writeFileSync(render, "rendered video");
+  assert.throws(() => registerDeliverable(root, "demo-video", render), /Project audio profile changed/);
+});
+
 test("retains immutable before and after review snapshots", () => {
   const root = fixture();
   const production = loadProduction(root, "demo-video");
   const before = snapshotProduction(root, "demo-video", "before: change the hook");
-  fs.appendFileSync(path.join(production.dir, "topic.md"), "\nUpdated hook.\n");
+  fs.appendFileSync(path.join(production.dir, "brief.md"), "\nUpdated hook.\n");
   const after = snapshotProduction(root, "demo-video", "after: change the hook");
 
   assert.equal(before.version, "V001");
   assert.equal(after.version, "V002");
-  assert.doesNotMatch(fs.readFileSync(path.join(production.dir, "history", "V001", "topic.md"), "utf8"), /Updated hook/);
-  assert.match(fs.readFileSync(path.join(production.dir, "history", "V002", "topic.md"), "utf8"), /Updated hook/);
+  assert.doesNotMatch(fs.readFileSync(path.join(production.dir, "history", "V001", "brief.md"), "utf8"), /Updated hook/);
+  assert.match(fs.readFileSync(path.join(production.dir, "history", "V002", "brief.md"), "utf8"), /Updated hook/);
   assert.throws(() => snapshotProduction(root, "demo-video"), /Snapshot note is required/);
-});
-
-test("runs approval, standards sync, delivery, validation, and archive end to end", () => {
-  const root = fixture();
-  const production = loadProduction(root, "demo-video");
-
-  for (const name of ["context.md", "topic.md", "retention-plan.md", "research.md", "script.md", "reference-analysis.md", "content-review.md"]) complete(path.join(production.dir, name));
-  approveGate(root, "demo-video", "content", "Producer");
-
-  for (const name of ["storyboard.md", "materials.md"]) complete(path.join(production.dir, name));
-
-  for (const name of ["tasks.md", "review.md"]) complete(path.join(production.dir, name));
-  const render = path.join(production.dir, "renders", "final.mp4");
-  fs.writeFileSync(render, "deterministic test render");
-  registerDeliverable(root, "demo-video", render, "master");
-  const legacyManifestFile = path.join(production.dir, "deliverables.json");
-  const legacyManifest = JSON.parse(fs.readFileSync(legacyManifestFile, "utf8"));
-  legacyManifest[0].path = render;
-  fs.writeFileSync(legacyManifestFile, `${JSON.stringify(legacyManifest, null, 2)}\n`);
-
-  assert.deepEqual(nextActions(root, "demo-video"), [
-    "Automatically complete the release package before final approval: selected title, separately composed 16:9/4:3/3:4 covers, description, exactly ten distinct tags, platform settings, and a master-promise check.",
-  ]);
-
-  fs.writeFileSync(path.join(production.dir, "specs", "visual.md"), `## ADDED Standards\n\n### Standard: Captions use at most two lines\n\nThe production SHALL keep captions to at most two lines.\n\n#### Check: Preview\n\n- **WHEN** captions are shown\n- **THEN** no caption SHALL exceed two lines\n`);
-  const synced = syncStandards(root, "demo-video");
-  assert.equal(synced.operationCount, 1);
-  assert.match(
-    fs.readFileSync(path.join(root, "videospec", "specs", "visual", "spec.md"), "utf8"),
-    /Captions use at most two lines/,
-  );
-
-  complete(path.join(production.dir, "publish.md"));
-  approveGate(root, "demo-video", "final", "Editor in chief");
-  assert.ok(loadProduction(root, "demo-video").metadata.approvals.final.hashes["publish.md"]);
-  fs.appendFileSync(path.join(production.dir, "publish.md"), "\nRevised title after final review.\n");
-  assert.equal(getStatus(root, "demo-video").approvals.final.state, "stale");
-  approveGate(root, "demo-video", "final", "Editor in chief");
-  approveGate(root, "demo-video", "publish", "Publisher");
-  fs.writeFileSync(path.join(production.dir, "publication.json"), JSON.stringify({ published: true, platform: "Test", url: "https://example.test/video/demo", platformId: "demo", publishedAt: "2026-09-14T00:00:00Z" }));
-  for (const name of ["analytics.md", "retrospective.md"]) complete(path.join(production.dir, name));
-  assert.deepEqual(validateProduction(root, "demo-video"), { valid: true, issues: [] });
-
-  const destination = archiveProduction(root, "demo-video");
-  assert.equal(fs.existsSync(destination), true);
-  assert.equal(fs.existsSync(production.dir), false);
-  assert.equal(path.dirname(destination), path.join(root, "productions", "archive"));
-  const archivedManifest = JSON.parse(fs.readFileSync(path.join(destination, "deliverables.json"), "utf8"));
-  assert.equal(path.isAbsolute(archivedManifest[0].path), false);
-  assert.equal(fs.existsSync(path.join(destination, archivedManifest[0].path)), true);
-  const archivedMetadata = JSON.parse(fs.readFileSync(path.join(destination, "production.json"), "utf8"));
-  assert.equal(archivedMetadata.archivePathMigration.changes[0].from, render);
 });
 
 test("keeps the legacy production directory when productionRoot is absent", () => {
@@ -460,13 +431,13 @@ test("copies legacy productions to the external root during update", () => {
   fs.writeFileSync(configFile, `${JSON.stringify(config, null, 2)}\n`);
   fs.rmSync(path.join(root, "productions"), { recursive: true, force: true });
   const legacy = createProduction(root, "migrated-video");
-  fs.writeFileSync(path.join(legacy.dir, "proposal.md"), "# Preserved proposal\n");
+  fs.writeFileSync(path.join(legacy.dir, "brief.md"), "# Preserved brief\n");
 
   const result = updateProject(root);
   const migrated = loadProduction(root, "migrated-video");
   assert.equal(result.migration.state, "copied");
   assert.equal(migrated.dir, path.join(root, "productions", "migrated-video"));
-  assert.equal(fs.readFileSync(path.join(migrated.dir, "proposal.md"), "utf8"), "# Preserved proposal\n");
+  assert.equal(fs.readFileSync(path.join(migrated.dir, "brief.md"), "utf8"), "# Preserved brief\n");
   assert.equal(fs.existsSync(path.join(root, "videospec", "productions", "migrated-video")), true);
   assert.equal(JSON.parse(fs.readFileSync(configFile, "utf8")).productionRoot, "productions");
 });
@@ -492,111 +463,11 @@ test("detects a standards delta edited after sync", () => {
   assert.equal(getStatus(root, "demo-video").standardsDelta.state, "stale");
 });
 
-test("lints template structure and cross-artifact references", () => {
-  const root = fixture();
-  const production = loadProduction(root, "demo-video");
-  for (const name of ["context.md", "topic.md", "reference-analysis.md", "retention-plan.md", "research.md", "script.md", "content-review.md", "storyboard.md", "materials.md", "tasks.md", "review.md", "publish.md", "analytics.md", "retrospective.md"]) {
-    complete(path.join(production.dir, name));
-  }
-
-  assert.deepEqual(lintProduction(root, "demo-video"), {
-    valid: true,
-    templateVersion: 5,
-    issues: [],
-    warnings: [],
-  });
-
-  const script = path.join(production.dir, "script.md");
-  const validScript = fs.readFileSync(script, "utf8");
-  fs.writeFileSync(script, validScript.replace("## 00:00–01:00", "## 00:00.000–01:00.123"));
-  assert.equal(lintProduction(root, "demo-video").valid, true);
-  fs.writeFileSync(script, validScript);
-  fs.writeFileSync(script, validScript.replace("> speech_rate: 15", "> speech_rate: 101"));
-  assert.match(lintProduction(root, "demo-video").issues.join("\n"), /speech_rate must be between -50 and 100/);
-  fs.writeFileSync(script, validScript);
-
-  const retentionPlan = path.join(production.dir, "retention-plan.md");
-  const validRetentionPlan = fs.readFileSync(retentionPlan, "utf8");
-  fs.writeFileSync(retentionPlan, validRetentionPlan.replace("- Script coverage: S001", "- Script coverage: S999"));
-  assert.match(lintProduction(root, "demo-video").issues.join("\n"), /retention-plan\.md B001 references missing script scene S999/);
-  fs.writeFileSync(retentionPlan, validRetentionPlan);
-
-  const storyboard = path.join(production.dir, "storyboard.md");
-  fs.writeFileSync(storyboard, fs.readFileSync(storyboard, "utf8").replace("- Script scene: S001", "- Script scene: S999"));
-  const result = lintProduction(root, "demo-video");
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /references missing script scene S999/);
-});
-
-test("requires reference material to map to real script scenes", () => {
-  const root = fixture();
-  const production = loadProduction(root, "demo-video");
-  complete(path.join(production.dir, "script.md"));
-  const reference = path.join(production.dir, "reference-analysis.md");
-  let content = fs.readFileSync(reference, "utf8")
-    .replace("- Mode: <!-- TODO: conversation, extract, or adapt -->", "- Mode: extract")
-    .replace("- Reference input: <!-- TODO: current-conversation locator and any source file/link -->", "- Reference input: current conversation / supplied transcript")
-    .replaceAll(/<!-- TODO(?::.*?)? -->/g, "Completed and verified");
-  content += `\n### Reference R001\n\n- Source locator: transcript 00:00–00:20\n- Extracted idea: First material idea\n- Verification: source-specific idea; no external factual claim\n- Adaptation decision: reframe\n- Script coverage: S001\n`;
-  fs.writeFileSync(reference, content);
-  assert.doesNotMatch(lintProduction(root, "demo-video").issues.join("\n"), /reference-analysis\.md R001/);
-
-  fs.writeFileSync(reference, content.replace("Script coverage: S001", "Script coverage: S999"));
-  assert.match(lintProduction(root, "demo-video").issues.join("\n"), /reference-analysis\.md R001 references missing script scene S999/);
-});
-
-test("locks user-authoritative subtitle scripts to a traceable source segment", () => {
-  const root = fixture();
-  const production = loadProduction(root, "demo-video");
-  const script = path.join(production.dir, "script.md");
-  complete(script);
-  let scriptContent = fs.readFileSync(script, "utf8")
-    .replace("- Script authority: newly-authored", "- Script authority: user-authoritative")
-    .replace("- Source subtitle coverage: Completed and verified", "- Source subtitle coverage: None");
-  fs.writeFileSync(script, scriptContent);
-  assert.match(lintProduction(root, "demo-video").issues.join("\n"), /S001 is missing Source subtitle coverage/);
-
-  scriptContent = scriptContent.replace("- Source subtitle coverage: None", "- Source subtitle coverage: supplied.srt:1-2");
-  fs.writeFileSync(script, scriptContent);
-  const reference = path.join(production.dir, "reference-analysis.md");
-  complete(reference);
-  let referenceContent = fs.readFileSync(reference, "utf8")
-    .replace("- Mode: conversation", "- Mode: authoritative-script")
-    .replace("- Authority: newly-authored", "- Authority: user-authoritative")
-    + "\n### Reference R002\n\n- Source locator: supplied.srt:1-2\n- Extracted idea: User-authoritative narration segment\n- Verification: user-provided script\n- Adaptation decision: reframe\n- Script coverage: S001\n";
-  fs.writeFileSync(reference, referenceContent);
-  assert.match(lintProduction(root, "demo-video").issues.join("\n"), /R002 must use Adaptation decision: preserve/);
-
-  fs.writeFileSync(script, scriptContent.replace("- Script authority: user-authoritative", "- Script authority: user-authored"));
-  referenceContent = referenceContent
-    .replace("- Mode: authoritative-script", "- Mode: user-authored-script")
-    .replace("- Authority: user-authoritative", "- Authority: user-authored")
-    .replace("- Adaptation decision: reframe", "- Adaptation decision: preserve");
-  fs.writeFileSync(reference, referenceContent);
-  const userAuthoredIssues = lintProduction(root, "demo-video").issues.join("\n");
-  assert.doesNotMatch(userAuthoredIssues, /user-authored-script mode must declare Authority/);
-  assert.doesNotMatch(userAuthoredIssues, /R002 must use Adaptation decision: preserve/);
-});
-
-test("continues to lint template v1 productions after v2 becomes the default", () => {
-  const root = fixture();
-  const production = useV1Templates(root);
-  for (const name of ["proposal.md", "brief.md", "script.md", "storyboard.md", "materials.md", "review.md"]) {
-    complete(path.join(production.dir, name));
-  }
-  assert.deepEqual(lintProduction(root, "demo-video"), {
-    valid: true,
-    templateVersion: 1,
-    issues: [],
-    warnings: [],
-  });
-});
-
 test("updates generated skills and runtime without changing production files", () => {
   const root = fixture();
   const production = loadProduction(root, "demo-video");
-  const proposal = path.join(production.dir, "proposal.md");
-  fs.writeFileSync(proposal, "# User-owned proposal\n");
+  const brief = path.join(production.dir, "brief.md");
+  fs.writeFileSync(brief, "# User-owned brief\n");
   fs.writeFileSync(path.join(root, ".agents", "skills", "videospec", "SKILL.md"), "outdated\n");
   const formerArchiveSkill = path.join(root, ".agents", "skills", "videospec-archive");
   fs.mkdirSync(formerArchiveSkill, { recursive: true });
@@ -613,11 +484,61 @@ test("updates generated skills and runtime without changing production files", (
   assert.equal(fs.existsSync(formerArchiveSkill), false);
   assert.equal(fs.readFileSync(path.join(customFinanceSkill, "SKILL.md"), "utf8"), "# User-owned finance skill\n");
   assert.equal(fs.readFileSync(path.join(root, result.agentLayer.retiredSkills[0], "SKILL.md"), "utf8"), "# User-customized former archive skill\n");
-  assert.equal(fs.readFileSync(proposal, "utf8"), "# User-owned proposal\n");
+  assert.equal(fs.readFileSync(brief, "utf8"), "# User-owned brief\n");
   assert.match(fs.readFileSync(path.join(root, ".agents", "skills", "videospec", "SKILL.md"), "utf8"), /name: videospec/);
+  assert.match(fs.readFileSync(path.join(root, ".agents", "skills", "videospec-apply", "SKILL.md"), "utf8"), /read the current `videospec\/specs\/audio\/spec\.md`, `videospec\/specs\/visual\/spec\.md`, and `videospec\/specs\/creative\/spec\.md`/);
+  assert.match(fs.readFileSync(path.join(root, ".agents", "skills", "videospec-verify", "SKILL.md"), "utf8"), /current audio, visual, and creative specs/);
   assert.equal(JSON.parse(fs.readFileSync(path.join(root, "videospec", "config.json"), "utf8")).toolVersion, VERSION);
   assert.equal(doctorProject(root).valid, true);
   assert.deepEqual(updateProject(root).agentLayer.retiredSkills, []);
+});
+
+test("update adds missing universal standards without replacing project wording", () => {
+  const root = fixture();
+  const audio = path.join(root, "videospec", "specs", "audio", "spec.md");
+  const visual = path.join(root, "videospec", "specs", "visual", "spec.md");
+  const creative = path.join(root, "videospec", "specs", "creative", "spec.md");
+  const removeStandard = (content, name) => content.replace(
+    new RegExp(`^### Standard: ${name}\\n[\\s\\S]*?(?=^### Standard: |$(?![\\s\\S]))`, "m"),
+    "",
+  );
+  let audioContent = removeStandard(fs.readFileSync(audio, "utf8"), "Captions convey meaningful audio information");
+  audioContent = removeStandard(audioContent, "Essential visual information is available through audio");
+  fs.writeFileSync(audio, audioContent);
+  let visualContent = fs.readFileSync(visual, "utf8")
+    .replace("For productions with on-screen captions,", "For this project, captions are always top aligned. For productions with on-screen captions,");
+  visualContent = removeStandard(visualContent, "Information-bearing overlay text maintains contrast");
+  visualContent = removeStandard(visualContent, "Color is not the only carrier of meaning");
+  visualContent = removeStandard(visualContent, "Data graphics preserve numeric context");
+  visualContent = removeStandard(visualContent, "Flashing effects remain below safety thresholds");
+  fs.writeFileSync(visual, visualContent);
+  fs.writeFileSync(creative, removeStandard(fs.readFileSync(creative, "utf8"), "Complex information has processing time"));
+
+  const result = updateProject(root);
+  assert.deepEqual(result.standardsAdded, [
+    "audio: Captions convey meaningful audio information",
+    "audio: Essential visual information is available through audio",
+    "visual: Information-bearing overlay text maintains contrast",
+    "visual: Color is not the only carrier of meaning",
+    "visual: Data graphics preserve numeric context",
+    "visual: Flashing effects remain below safety thresholds",
+    "creative: Complex information has processing time",
+  ]);
+  const updatedAudio = fs.readFileSync(audio, "utf8");
+  const updatedVisual = fs.readFileSync(visual, "utf8");
+  const updatedCreative = fs.readFileSync(creative, "utf8");
+  assert.match(updatedAudio, /### Standard: Captions convey meaningful audio information/);
+  assert.match(updatedAudio, /### Standard: Essential visual information is available through audio/);
+  assert.match(updatedVisual, /For this project, captions are always top aligned/);
+  assert.match(updatedVisual, /### Standard: Information-bearing overlay text maintains contrast/);
+  assert.match(updatedVisual, /### Standard: Color is not the only carrier of meaning/);
+  assert.match(updatedVisual, /### Standard: Data graphics preserve numeric context/);
+  assert.match(updatedVisual, /### Standard: Flashing effects remain below safety thresholds/);
+  assert.match(updatedCreative, /### Standard: Complex information has processing time/);
+  assert.deepEqual(updateProject(root).standardsAdded, []);
+  assert.equal(fs.readFileSync(audio, "utf8"), updatedAudio);
+  assert.equal(fs.readFileSync(visual, "utf8"), updatedVisual);
+  assert.equal(fs.readFileSync(creative, "utf8"), updatedCreative);
 });
 
 test("doctor reports a healthy initialized project and the CLI exposes its version", () => {

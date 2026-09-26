@@ -39,7 +39,7 @@ This file is the single source of truth for the selected viewer problem, editori
 
 ## Anti-boredom constraints and success hypothesis
 
-<!-- TODO: Identify article-read risks, repeated visual treatments to avoid, required examples or counterpoints, and the expected measurable signal. Set the information-progress interval relative to the target duration; for longer videos, add a new question, fact, example, condition, consequence, or payoff roughly every 30–45 seconds. -->
+<!-- TODO: Identify article-read risks, repeated visual treatments to avoid, required examples or counterpoints, and the expected measurable signal. Plan audible access to essential visual information and breathing room after dense concepts or charts. Set the information-progress interval relative to the target duration; for longer videos, add a new question, fact, example, condition, consequence, or payoff roughly every 30–45 seconds without forcing a cut or new claim before the current point can be understood. -->
 
 ## Evidence and uncertainty boundary
 

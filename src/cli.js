@@ -114,7 +114,10 @@ export async function main(argv) {
     const retired = result.agentLayer.retiredSkills.length
       ? `\nRetired skill backup: ${result.agentLayer.retiredSkills.join(", ")}.`
       : "";
-    print(json ? result : `Updated VideoSpec ${result.version} at ${result.root}\nRefreshed ${result.agentLayer.skills.length} AI skill(s).${migration}${retired}`, json);
+    const standards = result.standardsAdded.length
+      ? `\nAdded ${result.standardsAdded.length} missing universal standard(s) to project specs: ${result.standardsAdded.join("; ")}.`
+      : "";
+    print(json ? result : `Updated VideoSpec ${result.version} at ${result.root}\nRefreshed ${result.agentLayer.skills.length} AI skill(s).${migration}${retired}${standards}`, json);
     return;
   }
 
@@ -153,7 +156,7 @@ export async function main(argv) {
     const id = requireArg(args[0], "production id");
     const result = lintProduction(projectRoot, id);
     const formatted = result.valid
-      ? [`${id} matches template v${result.templateVersion ?? "legacy"}.`, ...result.warnings.map((warning) => `Warning: ${warning}`)].join("\n")
+      ? [`${id} matches template v${result.templateVersion}.`, ...result.warnings.map((warning) => `Warning: ${warning}`)].join("\n")
       : [`Template lint failed for ${id}:`, ...result.issues.map((issue) => `- ${issue}`), ...result.warnings.map((warning) => `Warning: ${warning}`)].join("\n");
     print(json ? result : formatted, json);
     if (!result.valid) process.exitCode = 1;

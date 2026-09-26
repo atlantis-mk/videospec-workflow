@@ -30,6 +30,8 @@ def check(production: Path) -> None:
     expected = record.get("inputsSha256")
     if not isinstance(expected, dict) or not expected:
         raise ValueError("render authorization has no preview input hashes")
+    if "script.md" not in expected:
+        raise ValueError("script is missing from preview input hashes")
     actual = {}
     for name, approved_hash in expected.items():
         path = (root / name).resolve()
@@ -39,6 +41,24 @@ def check(production: Path) -> None:
         if current_hash != approved_hash:
             raise ValueError(f"preview input changed since confirmation: {name}")
         actual[name] = current_hash
+    voice_manifest = root / "assets" / "audio" / "voice" / "manifest.json"
+    if voice_manifest.exists():
+        if not voice_manifest.resolve().is_relative_to(root):
+            raise ValueError("voice manifest is outside production")
+        if "assets/audio/voice/manifest.json" not in expected:
+            raise ValueError("voice manifest is missing from preview input hashes")
+        applied = json.loads(voice_manifest.read_text(encoding="utf-8"))
+        source = applied.get("audioProfileSource") if isinstance(applied, dict) else None
+        spec = next(
+            (parent / "videospec" / "specs" / "audio" / "spec.md"
+             for parent in root.parents
+             if (parent / "videospec" / "specs" / "audio" / "spec.md").is_file()),
+            None,
+        )
+        if spec is None or not isinstance(source, dict) or not source.get("sha256"):
+            raise ValueError("current project audio profile or applied profile hash is missing")
+        if digest(spec) != source["sha256"]:
+            raise ValueError("project audio profile changed since narration was generated")
     version = hashlib.sha256(
         json.dumps(actual, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     ).hexdigest()

@@ -1,12 +1,13 @@
 ---
 template: videospec/materials
-templateVersion: 2
+templateVersion: 6
 productionId: {{production.id}}
 ---
 
 # Materials plan: {{production.title}}
 
-Every external asset needs a source, a rights status, and a license or permission record before final approval. For Pexels assets, retain the asset-page URL, creator when shown, download date, and Pexels License reference; attribution is optional but provenance is required.
+Every external asset needs a source, a rights status, and a license or permission record before final approval.
+For a factual data graphic, also record its dataset/source, measure, unit, period, relevant denominator, transformation, and axis scale in the asset's intended use.
 
 ## Assets
 

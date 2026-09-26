@@ -8,7 +8,7 @@ VideoSpec 是一套受 [OpenSpec](https://openspec.dev/docs/overview) 启发的�
 - `<productionRoot>/<id>/` 是一期视频的完整工作单元；新项目默认的 `productionRoot` 为项目根目录下的 `productions/`。
 - 选题、调研、脚本、分镜、素材、制作、发布和复盘是可迭代的依赖关系，不是僵硬瀑布阶段。
 - 内容、最终成片、发布包保留三道人类审批；渲染前还须由人明确确认当前可播放预览。AI 不得代替人类发布或伪造平台数据。
-- 每次 AI 修改都保存同一期 production 的修改前/后快照；v6 的 `context.md` 保存需内容审批的决策，`activity.md` 保存审批后的时间、制作、QA 与发布包操作，历史永不删除。
+- 每次 AI 修改都保存同一期 production 的修改前/后快照；`context.md` 保存需内容审批的决策，`activity.md` 保存审批后的时间、制作、QA 与发布包操作，历史永不删除。
 - 审批绑定文件 SHA-256；审批后修改文件会自动显示为过期。
 - 一期视频产生的长期规则变化，通过 standards delta 回写到主规范。
 - 所有 AI 产物由版本化模板生成，并在审批前执行结构校验。
@@ -63,7 +63,7 @@ VideoSpec 提供以下 AI 技能：
 → 授权数据 + learning.md → 长期规范同步 → 归档
 ```
 
-三道内容与发布审批以及单独的预览渲染确认都是人为决策点；缺少实际制作所需的外部能力或授权数据，或限定次数后仍有阻塞性 QA 失败时，流程会记录原因并暂停。当前对话中此前已经确认的用户要求、附件、链接、参考稿、讨论结论和后续补充都属于同一期的内容输入；它们会写入 v6 的 `evidence.md`（旧版 production 仍使用原有文件），不会要求用户重复说明。已完成且仍适用的选题探索会直接复用；用户已确定方向或提供受保护脚本时，不再强制生成一组竞争选题。只有其他 production 的工作上下文不会自动带入。只要存在相关对话文本，流程就按文本和讨论生成：用户目标、决策和修正使用 `conversation`，附带稿件或素材使用 `extract`，要求重新表达同一内容使用 `adapt`；不存在“灵感创作”或脱离上下文直接换题的路径。每项实质内容必须保留、改写或明确说明省略理由，并映射到口播或分镜；不允许借“原创”或版权谨慎之名替换成另一个选题。审稿或 QA 发现的可修复问题会自动回到最早受影响的产物，修复后重新审查；同一 QA 问题最多自动修复并复检两次，一次 QA 运行最多三轮，仍失败的原因和风险会留在 `review.md`。若改变已审批内容，则审批自动失效并仅回到对应人工关卡。平台数据仅在已授权且实际可用时读取，AI 不会编造指标、发布事实或来源。每次修改都先保存 `history/V###` 的前态，完成后保存后态；v6 的日常操作差异写入 `activity.md`，内容决策变动才更新已签名的 `context.md` 并使内容审批过期。历史不会覆盖或删除。只有明确同步的可泛化规则会进入长期规范，上一期的工作上下文不会自动带入下一期。
+三道内容与发布审批以及单独的预览渲染确认都是人为决策点；缺少实际制作所需的外部能力或授权数据，或限定次数后仍有阻塞性 QA 失败时，流程会记录原因并暂停。当前对话中此前已经确认的用户要求、附件、链接、参考稿、讨论结论和后续补充都属于同一期的内容输入；它们会写入 `evidence.md`，不会要求用户重复说明。已完成且仍适用的选题探索会直接复用；用户已确定方向或提供受保护脚本时，不再强制生成一组竞争选题。只有其他 production 的工作上下文不会自动带入。只要存在相关对话文本，流程就按文本和讨论生成：用户目标、决策和修正使用 `conversation`，附带稿件或素材使用 `extract`，要求重新表达同一内容使用 `adapt`；不存在“灵感创作”或脱离上下文直接换题的路径。每项实质内容必须保留、改写或明确说明省略理由，并映射到口播或分镜；不允许借“原创”或版权谨慎之名替换成另一个选题。审稿或 QA 发现的可修复问题会自动回到最早受影响的产物，修复后重新审查；同一 QA 问题最多自动修复并复检两次，一次 QA 运行最多三轮，仍失败的原因和风险会留在 `review.md`。若改变已审批内容，则审批自动失效并仅回到对应人工关卡。平台数据仅在已授权且实际可用时读取，AI 不会编造指标、发布事实或来源。每次修改都先保存 `history/V###` 的前态，完成后保存后态；日常操作差异写入 `activity.md`，内容决策变动才更新已签名的 `context.md` 并使内容审批过期。历史不会覆盖或删除。只有明确同步的可泛化规则会进入长期规范，上一期的工作上下文不会自动带入下一期。
 
 ## 安装与初始化
 
@@ -91,7 +91,7 @@ python3 videospec/scripts/generate_voice.py productions/<production-id>/script.m
 python3 videospec/scripts/generate_voice.py productions/<production-id>/script.md
 ```
 
-首次非 dry-run 配音会在 `assets/audio/voice/narration-lock.json` 锁定 `**口播：**` 文字；之后生成器会拒绝任何口播变更。v6 脚本采用一段连续口播，一次请求生成整篇；v2–v5 的分场景口播和场景顺序继续受支持。完整配音会永久保留 `raw/` 音频，对音频做 75 Hz 低切、轻度去齿音、`2.5:1` 人声压缩及 **-1.5 dB** 安全限幅。完整运行会把 v6 实测时长和相对于 production 的音频路径写入 `assets/audio/voice/manifest.json`，不改动已获内容审批的 `script.md`；v2–v5 仍按旧格式校准场景时间码。它不会改写口播。合并后的 `assets/audio/voice/narration.wav` 采用两遍 EBU R128 校准：单声道 **48 kHz / 24-bit PCM WAV**、**-16 LUFS**、**6 LU LRA**、**-1.5 dBTP**。视频制作只能使用该合并文件，不直接使用 `raw/` 下的分段文件。加入 BGM、音效后的最终立体声成片则应混音至 **-14 LUFS**、**-1.0 dBTP**。
+首次非 dry-run 配音会在 `assets/audio/voice/narration-lock.json` 锁定 `**口播：**` 文字。用户后来明确修改口播时，先记录精确差异并重新通过内容审批，再用 `generate_voice.py <production>/script.md --revise-narration` 重录；旧配音、旧预览确认及交付清单保存在 `assets/audio/voice/revisions/R###/`，旧预览确认与交付登记失效，须重新制作字幕、预览和成片。修订中断后用普通生成命令继续当前版本。脚本采用一段连续口播，一次请求生成整篇。配音脚本从当前项目的 `videospec/specs/audio/spec.md` 读取 `Audio profile`，保留 raw 音频，并按该 profile 生成 `assets/audio/voice/narration.wav`。实测时长、应用的 profile 及规范文件哈希写入 `assets/audio/voice/manifest.json`，不改动已获内容审批的 `script.md`。视频制作使用处理后的旁白主文件；最终混音按同一项目规范检查。发布封面和标签数量以项目的 `videospec/specs/delivery/spec.md` 为准。
 
 ## Paraformer 字幕导出与校正
 
@@ -104,7 +104,7 @@ python3 videospec/scripts/export_subtitles.py \
   --output productions/<production-id>/assets/audio/voice/subtitles/narration.asr.srt
 ```
 
-模型没有可用的时间戳时，脚本会明确失败而不会伪造字幕时序。对于已锁定的 v6 口播，可以保留原 ASR 时间码，并用脚本文字校正识别差异：
+模型没有可用的时间戳时，脚本会明确失败而不会伪造字幕时序。对于已锁定的口播，可以保留原 ASR 时间码，并用脚本文字校正识别差异：
 
 ```bash
 python3 videospec/scripts/export_subtitles.py \
@@ -115,7 +115,7 @@ python3 videospec/scripts/export_subtitles.py \
 
 ## 字幕与视觉时序自检
 
-从 `0.4.2` 起，新项目的视觉规范要求：当使用带时间码的字幕或口播对照时，相关效果、标签、卡片、示意图和素材画面必须在分镜中对应到字幕或口播片段；它们只能在对应内容开始后出现，且不得延续到会造成误导的无关内容中。
+项目视觉规范要求：当使用带时间码的字幕或口播对照时，相关效果、标签、卡片、示意图和素材画面必须在分镜中对应到字幕、口播或已批准的节拍；通常在对应内容开始后出现，且不得延续到会造成误导的无关内容中。刻意的开场悬念可提前入场，但分镜须说明意图，预览检查须确认没有提前泄露答案或结果。
 
 使用时，在分镜的 `Visual composition` 中写清元素对应的口播/字幕和出现时间；渲染后直接让 Agent 执行：
 
@@ -132,7 +132,7 @@ npm install -g videospec-workflow@latest
 videospec update
 ```
 
-若要把这条规则写进旧项目的长期真相源，在某期 production 的 `specs/visual.md` 加入对应的 `ADDED Standard`，然后执行 `$videospec-sync`。`videospec update` 不会改写既有项目已维护的长期规范。
+`videospec update` 会把缺失的字幕呈现、字幕音频信息、重要视觉信息的音频可达性、动态背景文字对比度、数据图表的刻度与语境、复杂信息的理解时间、非颜色线索和闪烁安全等通用规范补进旧项目的 `videospec/specs/`，供方案、分镜、生成与验收技能实际读取；同名的项目自定义条款保持原样。其他项目规范仍通过某期 production 的 standards delta 和 `$videospec-sync` 维护。旧 production 的任务和审片模板不会被覆盖，但技能会把适用规范的设计选择和检查结果补记到现有 `storyboard.md`、`tasks.md` 和 `review.md`。
 
 升级全局包后，在每个已经初始化的项目中刷新技能和内嵌运行时：
 
@@ -191,8 +191,8 @@ videospec/
 ├── AGENTS.md
 ├── config.json
 ├── project.md
-├── templates/v1..v6/         # 随内嵌运行时安装的版本化模板
-├── schemas/v1..v6/           # Markdown 结构规则与 JSON Schema
+├── templates/v6/             # 当前模板
+├── schemas/v6/               # Markdown 结构规则与 JSON Schema
 ├── specs/
 │   ├── content/spec.md
 │   ├── creative/spec.md
@@ -253,61 +253,15 @@ videospec next ai-video-workflow --json
 videospec validate ai-video-workflow --json
 ```
 
-## 版本化模板与格式校验
+## 模板与格式校验
 
-新 production 会记录独立的 `templateVersion`。Markdown frontmatter、固定标题、标题顺序和字段名都属于模板契约；脚本、分镜和素材使用可重复的固定块，并通过 `S001`、`MAT-001` 等 ID 关联。v1–v5 保留用于复现旧 production，v6 是当前默认模板。
+新 production 记录 `templateVersion: 6`。Markdown frontmatter、固定标题、标题顺序和字段名都属于模板契约；分镜和素材使用可重复的固定块，并通过 `S001`、`MAT-001` 等 ID 关联。运行时只支持 v6 production。
 
-v0.8.0 起新建的 v6 production 使用 `artifactContractVersion: 3`：`render-authorization.json` 初始为 `approved: false`。制作方在 `tasks.md` 记录预览 QA，并在授权记录中填入可播放预览地址、通过的 QA、预览使用的本地文件 SHA-256 和由这些哈希计算的版本值。用户明确确认当前预览后才记录确认人和时间；渲染前运行 `check_render_authorization.py`，`videospec deliver` 和最终成片审批也会拒绝缺失或过期的授权。修改画面、时间线、字幕、声音或素材后须重做预览与确认。旧 v6 production 的契约保持兼容。
+当前新建的 production 使用 `artifactContractVersion: 3`：`render-authorization.json` 初始为 `approved: false`。制作方在 `tasks.md` 记录预览 QA，并在授权记录中填入可播放预览地址、通过的 QA、预览使用的本地文件 SHA-256 和由这些哈希计算的版本值。用户明确确认当前预览后才记录确认人和时间；渲染前运行 `check_render_authorization.py`，`videospec deliver` 和最终成片审批也会拒绝缺失或过期的授权。修改画面、时间线、字幕、声音或素材后须重做预览与确认。早期 v6 production 的契约仍可读取。
 
-v6 将选题和留存设计归入 `brief.md`、参考覆盖和调研归入 `evidence.md`，发布后的分析归入 `learning.md`；`script.md` 使用整篇连续口播，由分镜承担场景划分。证据条目映射到留存 beat，beat 以原文短句锚定口播，分镜再映射到 beat、素材映射到分镜场景。v5 在内容审批前增加 `retention-plan.md`：先写角度池与核心判断，再把每个 `B001` 留存 beat 映射至真实脚本场景。每个 beat 都必须说明观众状态、叙事动作、开放问题或 payoff、新价值，以及有叙事理由的视听变化。它不强制剪辑频率；目标是避免“文章朗读式”视频。v5 脚本要求每一幕说明观众状态、叙事动作和推进的 open loop/payoff；分镜要求视觉模式和注意力任务；最终 `review.md` 则额外保留时间码化的 Audience Critic 审片，作为待平台数据验证的编辑假设，不冒充真实留存数据。
+选题和留存设计归入 `brief.md`，参考覆盖和调研归入 `evidence.md`，发布后分析归入 `learning.md`；`script.md` 使用整篇连续口播，由分镜承担场景划分。证据条目映射到留存 beat，beat 以原文短句锚定口播，分镜再映射到 beat、素材映射到分镜场景。
 
-### 可直接提取的旁白格式（v2–v5）
-
-v2 的脚本把 TTS 输入和视觉说明明确分开：
-
-```markdown
-## TTS configuration
-
-**接口与音频参数：**
-
-> endpoint: /api/v3/tts/unidirectional
-> resource_id: seed-tts-2.0
-> speaker: zh_male_example_bigtts
-> format: mp3
-> sample_rate: 24000
-> bit_rate: 128000
-> enable_subtitle: true
-> explicit_language: zh-cn
-> disable_markdown_filter: false
-> max_length_to_filter_parenthesis: 0
-> aigc_watermark: false
-
-## 00:00–00:08｜开场提出问题
-
-- Scene ID: S001
-- Purpose: 建立问题
-- Evidence: None
-
-**合成参数：**
-
-> speech_rate: 15
-> loudness_rate: 0
-> silence_duration_ms: 200
-> post_process_pitch: 0
-> section_id: demo-video:S001
-
-**演绎提示：**
-
-> 直接、有一点紧迫感但不制造焦虑；前三句短促，重读“上手门槛”。
-
-**口播：**
-
-> 这里仅放真正送入录音或 TTS 的文字。
-```
-
-文件开头还有 `全局演绎提示`，定义角色、整体语气、发音原则和需要避免的风格。API 参数和自然语言演绎提示保持分离：参数直接映射到火山引擎请求，`全局演绎提示` 与逐段 `演绎提示` 合并后写入 `additions.context_texts`。旁白生成器只提取 `口播` 块中的文字。
-
-v6 把合成参数放在整篇口播之前，生成一次主旁白；以下参数范围适用于新旧模板。参数范围遵循火山引擎单向流式 HTTP 接口：`speech_rate` 和 `loudness_rate` 为 -50–100，`silence_duration_ms` 为 0–30000，`post_process_pitch` 为 -12–12。`speech_rate: 15` 是新脚本和缺失参数时的基线；每个场景可按叙事、情绪、信息密度与理解需要上下浮动，不应机械锁定全片。`context_texts` 仅在 `speaker` 为豆包语音合成模型 2.0 音色时支持；复刻音色指定 `model` 后不支持语音指令。
+口播使用全局演绎提示、接口与音频参数、整篇合成参数，以及单个块引用的 `**口播：**` 字段。生成器只提取 `口播` 块中的文字。TTS 参数的合法范围由代码校验；项目的音频交付目标以 `videospec/specs/audio/spec.md` 为准。
 
 AI 在创建或修改文件后会自动执行：
 
@@ -321,11 +275,11 @@ videospec lint ai-video-workflow
 - 未解析的模板变量和 TODO；
 - 场景/素材 ID 的唯一性与连续性；
 - 时间码合法性与场景重叠；
-- retention plan、storyboard、materials 对 script 场景的引用；
-- 接口/音频配置、逐段合成参数范围、演绎提示和块引用口播；
-- 脚本结束时间与目标时长的偏差警告，以及毫秒级实测配音时间码。
+- evidence、brief、storyboard、materials 的引用链；
+- 接口/音频配置、整篇合成参数范围、演绎提示和块引用口播；
+- 分镜时间码合法性与场景重叠。
 
-结构错误会阻止对应审批。没有 `templateVersion` 的旧 production 继续按 legacy 模式读取，`update` 不会自动改写用户的制作文件。
+结构错误会阻止对应审批。旧模板版本的 production 会收到明确的不支持错误；`update` 不会自动改写制作文件。
 
 ## 与 HyperFrames 配合
 
@@ -333,7 +287,7 @@ videospec lint ai-video-workflow
 
 1. AI 从当前对话的相关要求与参考材料开始，在 `context.md` 的约束下完成 `brief.md`、`evidence.md`、`script.md` 和 `content-review.md`。AI 会先钢人化最强反方，再做严格脚本审稿；`evidence.md` 记录参考内容覆盖，`brief.md` 记录留存设计。AI 可以重写表达与结构，但不能无说明地丢掉“提炼/按内容制作”所要求的实质内容。
 2. 人工批准内容包。
-3. AI 先以自媒体导演身份完成 `storyboard.md`、`materials.md`，再制作 TTS 和 HyperFrames 成片；产物注册后在 `review.md` 完成观众代理与技术自动审片。该连续作业同时使用 `$imagegen` 分别生成并检查 16:9 / 4:3 / 3:4 封面，再将接受的文件存入 production 的 `assets/covers/`；随后完成 `publish.md`（标题、封面提示词/生成记录、简介、元数据、10 个不重复且搜索相关的标签），并核验其承诺与成片一致。
+3. AI 先以自媒体导演身份完成 `storyboard.md`、`materials.md`，再制作 TTS 和 HyperFrames 成片；产物注册后在 `review.md` 完成观众代理与技术自动审片。该连续作业按项目交付规范使用 `$imagegen` 分别生成并检查封面，再将接受的文件存入规范指定路径；随后完成 `publish.md`（标题、封面提示词/生成记录、简介、元数据、规范要求数量的不重复且搜索相关的标签），并核验其承诺与成片一致。
 4. 人工批准最终成片，同时看到已准备好的发布包。
 5. 人工批准发布包后由人发布；发布事实记录在 `publication.json`。
 6. AI 将实际数据和下期实验建议写入 `learning.md`，并将明确、可泛化的规则同步进 `videospec/specs/`，随后归档；不会自动复制本期工作上下文。

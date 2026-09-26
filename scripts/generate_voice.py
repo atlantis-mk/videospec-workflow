@@ -12,6 +12,7 @@ import argparse
 import base64
 import hashlib
 import json
+import math
 import os
 import re
 import shutil
@@ -27,28 +28,107 @@ from urllib.request import Request, urlopen
 ENDPOINT = "https://openspeech.bytedance.com/api/v3/plan/tts/unidirectional"
 RESOURCE_ID = "seed-tts-2.0"
 DEFAULT_SPEAKER = "zh_male_m191_uranus_bigtts"
-# Delivery targets apply to the processed voice master, not the source TTS request.
-# The TTS provider may synthesize at a lower native rate; FFmpeg produces the
-# project master as 48 kHz / 24-bit PCM WAV after the safety processing below.
-TARGET_SAMPLE_RATE = 48000
-TARGET_CHANNELS = 1
-TARGET_CODEC = "pcm_s24le"
-TARGET_LOUDNESS = -16.0
-TARGET_LRA = 6.0
-TRUE_PEAK_LIMIT = -1.5
-LIMITER_AMPLITUDE = "0.8414"  # -1.5 dBFS, an additional safety guard after loudnorm.
 NARRATION_LOCK_FILE = "narration-lock.json"
 
-# Gentle, speech-first scene conditioning. Do not loudness-normalize each short
-# scene: doing that makes scene boundaries sound unnaturally uneven. Exact
-# integrated loudness is set once on the fully merged narration in two passes.
-SCENE_CONDITIONING_FILTER = (
-    "highpass=f=75,"
-    "deesser=i=0.15:m=0.5:f=0.5:s=o,"
-    "acompressor=threshold=0.125:ratio=2.5:attack=10:release=120:"
-    "knee=3:makeup=1:link=average:detection=rms,"
-    f"alimiter=limit={LIMITER_AMPLITUDE}:level=0"
-)
+
+def prose_audio_profile(content: str, spec_file: Path) -> dict:
+    """Read the previous v6 prose format without overriding project targets."""
+    voice_block = re.search(r"^### Standard: Narration uses a non-destructive, controlled voice master\s*\n([\s\S]*?)(?=^### Standard:|\Z)", content, re.MULTILINE)
+    mix_block = re.search(r"^### Standard: Final video mix is delivery-ready\s*\n([\s\S]*?)(?=^### Standard:|\Z)", content, re.MULTILINE)
+    if not voice_block or not mix_block:
+        raise RuntimeError(f"Audio profile JSON is missing from {spec_file}; add the current Audio profile block.")
+
+    def value(text: str, pattern: str, label: str) -> str:
+        match = re.search(pattern, text, re.IGNORECASE)
+        if not match:
+            raise RuntimeError(f"Cannot read {label} from {spec_file}; add the current Audio profile block.")
+        return match.group(1)
+
+    voice = voice_block.group(1)
+    mix = mix_block.group(1)
+    voice_format = re.search(r"narration master SHALL be (mono|stereo) (\d+) kHz / (\d+)-bit PCM WAV", voice)
+    mix_format = re.search(r"final video audio SHALL be (mono|stereo) (\d+) kHz", mix)
+    if not voice_format or not mix_format:
+        raise RuntimeError(f"Cannot read audio formats from {spec_file}; add the current Audio profile block.")
+    codec = {"16": "pcm_s16le", "24": "pcm_s24le"}.get(voice_format.group(3))
+    return {
+        "voiceMaster": {
+            "highPassHz": int(value(voice, r"(\d+) Hz high-pass", "high-pass")),
+            "compressionRatio": float(value(voice, r"([\d.]+):1 speech compression", "compression ratio")),
+            "safetyLimiterDbfs": float(value(voice, r"(-[\d.]+) dB safety limiter", "safety limiter")),
+            "sampleRateHz": int(voice_format.group(2)) * 1000,
+            "channels": 1 if voice_format.group(1) == "mono" else 2,
+            "codec": codec,
+            "integratedLoudnessLufs": float(value(voice, r"to (-[\d.]+) LUFS", "voice loudness")),
+            "loudnessRangeLu": float(value(voice, r"([\d.]+) LU loudness range", "loudness range")),
+            "truePeakDbtp": float(value(voice, r"no more than (-[\d.]+) dBTP", "voice true peak")),
+        },
+        "finalMix": {
+            "sampleRateHz": int(mix_format.group(2)) * 1000,
+            "channels": 1 if mix_format.group(1) == "mono" else 2,
+            "integratedLoudnessLufs": float(value(mix, r"to (-[\d.]+) LUFS", "final mix loudness")),
+            "truePeakDbtp": float(value(mix, r"no more than (-[\d.]+) dBTP", "final mix true peak")),
+        },
+    }
+
+
+def load_audio_profile(script_path: Path) -> tuple[dict, Path]:
+    """Read the current project's audio targets from its durable standard."""
+    spec_file = next(
+        (parent / "videospec" / "specs" / "audio" / "spec.md"
+         for parent in script_path.parents
+         if (parent / "videospec" / "specs" / "audio" / "spec.md").is_file()),
+        None,
+    )
+    if spec_file is None:
+        raise RuntimeError("Project audio standard not found at videospec/specs/audio/spec.md.")
+    content = spec_file.read_text(encoding="utf-8")
+    match = re.search(r"^#### Audio profile\s*\n+```json\s*\n([\s\S]*?)\n```", content, re.MULTILINE)
+    if match:
+        try:
+            profile = json.loads(match.group(1))
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"Audio profile JSON is invalid in {spec_file}: {error}") from error
+    else:
+        profile = prose_audio_profile(content, spec_file)
+    if not isinstance(profile, dict) or not isinstance(profile.get("voiceMaster"), dict) or not isinstance(profile.get("finalMix"), dict):
+        raise RuntimeError(f"Audio profile must contain voiceMaster and finalMix objects: {spec_file}")
+
+    def numeric(section: str, key: str, minimum: float, maximum: float, *, integer: bool = False) -> None:
+        value = profile[section].get(key)
+        if type(value) not in (int, float) or not math.isfinite(value) or not minimum <= value <= maximum or (integer and int(value) != value):
+            raise RuntimeError(f"Invalid audio profile {section}.{key} in {spec_file}.")
+
+    for key, low, high, integer in (
+        ("highPassHz", 20, 300, True), ("compressionRatio", 1, 10, False),
+        ("safetyLimiterDbfs", -12, -0.1, False), ("sampleRateHz", 8000, 192000, True),
+        ("channels", 1, 2, True), ("integratedLoudnessLufs", -30, -8, False),
+        ("loudnessRangeLu", 1, 20, False), ("truePeakDbtp", -12, -0.1, False),
+    ):
+        numeric("voiceMaster", key, low, high, integer=integer)
+    for key, low, high, integer in (
+        ("sampleRateHz", 8000, 192000, True), ("channels", 1, 2, True),
+        ("integratedLoudnessLufs", -30, -8, False), ("truePeakDbtp", -12, -0.1, False),
+    ):
+        numeric("finalMix", key, low, high, integer=integer)
+    if profile["voiceMaster"].get("codec") not in {"pcm_s16le", "pcm_s24le", "pcm_f32le"}:
+        raise RuntimeError(f"Unsupported audio profile voiceMaster.codec in {spec_file}.")
+    return profile, spec_file
+
+
+def limiter_amplitude(dbfs: float) -> str:
+    return f"{10 ** (dbfs / 20):.6f}"
+
+
+def scene_conditioning_filter(profile: dict) -> str:
+    voice = profile["voiceMaster"]
+    return (
+        f"highpass=f={voice['highPassHz']},"
+        "deesser=i=0.15:m=0.5:f=0.5:s=o,"
+        f"acompressor=threshold=0.125:ratio={voice['compressionRatio']}:attack=10:release=120:"
+        "knee=3:makeup=1:link=average:detection=rms,"
+        f"alimiter=limit={limiter_amplitude(voice['safetyLimiterDbfs'])}:level=0"
+    )
 
 
 def secret_key(script_path: Path) -> str:
@@ -131,10 +211,7 @@ def config_bool(values: dict[str, str], key: str, default: bool) -> bool:
 
 
 def tts_configuration(script: str, speaker_override: str | None, format_override: str | None) -> dict[str, object]:
-    heading_pattern = re.compile(r"^##\s+\d{2,}:\d{2}(?:\.\d{3})?[–-]\d{2,}:\d{2}(?:\.\d{3})?｜", re.MULTILINE)
-    first_heading = heading_pattern.search(script)
-    prefix = script[:first_heading.start()] if first_heading else script
-    values = interface_parameters(prefix)
+    values = interface_parameters(script)
     speaker = usable_config_value(speaker_override) or usable_config_value(values.get("speaker")) or DEFAULT_SPEAKER
     audio_format = usable_config_value(format_override) or usable_config_value(values.get("format")) or "wav"
     if audio_format not in {"mp3", "wav"}:
@@ -163,42 +240,7 @@ def bounded_int(values: dict[str, str], key: str, default: int, minimum: int, ma
     return value
 
 
-def legacy_scenes(script: str) -> list[dict]:
-    pattern = re.compile(r"^##\s+(\d{2,}:\d{2}(?:\.\d{3})?)[–-](\d{2,}:\d{2}(?:\.\d{3})?)｜(.+?)\s*$", re.MULTILINE)
-    headings = list(pattern.finditer(script))
-    if not headings:
-        raise SystemExit("No narration scenes found. Expected `## 00:00–00:10｜Title` headings.")
-    global_direction = blockquote(script[:headings[0].start()], "全局演绎提示") or "自然、清晰、可信。"
-    result = []
-    for index, heading in enumerate(headings, start=1):
-        section = script[heading.end(): headings[index].start() if index < len(headings) else len(script)]
-        scene_match = re.search(r"^- Scene ID:\s*(S\d{3})\s*$", section, re.MULTILINE)
-        if not scene_match:
-            raise SystemExit(f"Missing Scene ID for {heading.group(3)}")
-        narration = blockquote(section, "口播")
-        if not narration:
-            raise SystemExit(f"Missing blockquoted narration for {scene_match.group(1)}")
-        values = parameters(section)
-        scene_id = scene_match.group(1)
-        result.append({
-            "id": scene_id,
-            "number": index,
-            "title": heading.group(3).strip(),
-            "text": narration,
-            "direction": blockquote(section, "演绎提示") or "自然、清晰，重点突出。",
-            "section_id": values.get("section_id", f"voice:{scene_id}"),
-            "speech_rate": bounded_int(values, "speech_rate", 15, -50, 100, scene_id),
-            "loudness_rate": bounded_int(values, "loudness_rate", 0, -50, 100, scene_id),
-            "silence_duration_ms": bounded_int(values, "silence_duration_ms", 0, 0, 30000, scene_id),
-            "post_process_pitch": bounded_int(values, "post_process_pitch", 0, -12, 12, scene_id),
-            "global_direction": global_direction,
-        })
-    return result
-
-
 def scenes(script: str) -> list[dict]:
-    if re.search(r"^##\s+\d{2,}:\d{2}(?:\.\d{3})?[–-]\d{2,}:\d{2}(?:\.\d{3})?｜", script, re.MULTILINE):
-        return legacy_scenes(script)
     narration = blockquote(script, "口播")
     if not narration:
         raise SystemExit("Missing blockquoted continuous narration under **口播：**.")
@@ -223,8 +265,8 @@ def scenes(script: str) -> list[dict]:
 def narration_payload(parsed: list[dict]) -> list[dict[str, str]]:
     """Return the only script material that becomes spoken audio.
 
-    Timing headers, visual notes, and delivery parameters can be recalibrated
-    after synthesis. The scene order and blockquoted narration cannot.
+    Visual notes and delivery parameters may change after synthesis.
+    The blockquoted narration cannot.
     """
     return [{"sceneId": scene["id"], "text": scene["text"]} for scene in parsed]
 
@@ -259,6 +301,72 @@ def ensure_narration_lock(lock_file: Path, parsed: list[dict]) -> dict:
     return lock
 
 
+def require_revised_content_approval(script_path: Path) -> None:
+    """A changed manuscript needs a fresh signed content decision."""
+    production = script_path.parent
+    metadata_file = production / "production.json"
+    if not metadata_file.is_file():
+        raise RuntimeError("Narration revision requires a VideoSpec production with renewed content approval.")
+    metadata = json.loads(metadata_file.read_text(encoding="utf-8"))
+    approval = metadata.get("approvals", {}).get("content")
+    hashes = approval.get("hashes") if isinstance(approval, dict) else None
+    protected = ("context.md", "brief.md", "evidence.md", "script.md", "content-review.md")
+    if not isinstance(hashes, dict) or any(
+        not (production / name).is_file()
+        or hashlib.sha256((production / name).read_bytes()).hexdigest() != hashes.get(name)
+        for name in protected
+    ):
+        raise RuntimeError("Narration revision requires renewed content approval for the current script and content files.")
+
+
+def archive_voice_revision(voice_root: Path) -> str:
+    """Preserve every previous voice asset before replacing the active narration."""
+    revisions = voice_root / "revisions"
+    revisions.mkdir(parents=True, exist_ok=True)
+    numbers = [int(item.name[1:]) for item in revisions.iterdir() if item.is_dir() and re.fullmatch(r"R\d{3}", item.name)]
+    revision = f"R{max(numbers, default=0) + 1:03d}"
+    destination = revisions / revision
+    staging = revisions / f".{revision}-{uuid.uuid4().hex}"
+    staging.mkdir()
+    production = voice_root.parent.parent.parent
+    try:
+        for item in voice_root.iterdir():
+            if item.name == "revisions":
+                continue
+            if item.is_symlink() or (item.is_dir() and any(child.is_symlink() for child in item.rglob("*"))):
+                raise RuntimeError(f"Refusing to archive symlinked voice asset: {item}")
+            if item.is_dir():
+                shutil.copytree(item, staging / item.name)
+            elif item.is_file():
+                shutil.copy2(item, staging / item.name)
+        for name in ("production.json", "render-authorization.json", "deliverables.json"):
+            source = production / name
+            if source.is_file():
+                shutil.copy2(source, staging / name)
+        staging.rename(destination)
+    except Exception:
+        shutil.rmtree(staging, ignore_errors=True)
+        raise
+    for item in voice_root.iterdir():
+        if item.name == "revisions":
+            continue
+        if item.is_dir():
+            shutil.rmtree(item)
+        else:
+            item.unlink()
+    authorization = production / "render-authorization.json"
+    if authorization.is_file():
+        authorization.write_text(json.dumps({
+            "approved": False, "confirmedBy": None, "confirmedAt": None,
+            "previewUrl": None, "preRenderQa": {"passed": False, "record": "tasks.md"},
+            "inputsSha256": {}, "previewVersionSha256": None,
+        }, indent=2) + "\n", encoding="utf-8")
+    deliverables = production / "deliverables.json"
+    if deliverables.is_file():
+        deliverables.write_text("[]\n", encoding="utf-8")
+    return revision
+
+
 def wav_duration_seconds(source: Path) -> float:
     """Read a processed WAV duration, falling back to FFprobe for extensible WAV."""
     import wave
@@ -290,58 +398,6 @@ def format_timecode(seconds: float) -> str:
     minutes, milliseconds = divmod(milliseconds, 60_000)
     whole_seconds, milliseconds = divmod(milliseconds, 1000)
     return f"{minutes:02d}:{whole_seconds:02d}.{milliseconds:03d}"
-
-
-def recalibrate_script_timing(script_path: Path, parsed: list[dict], durations: list[float]) -> float:
-    """Replace only scene headers and timing status with measured voice durations."""
-    if len(parsed) != len(durations):
-        raise RuntimeError("Cannot recalibrate script timing: scene and duration counts differ.")
-    content = script_path.read_text(encoding="utf-8")
-    if len(parsed) == 1 and parsed[0]["id"] == "MASTER":
-        cursor = durations[0]
-        timing_line = (
-            f"- Narration timing: Calibrated from one real master voice request; total {format_timecode(cursor)}; "
-            "source `assets/audio/voice/narration.wav`. Spoken text is locked."
-        )
-        if re.search(r"^- Narration timing:\s*.*$", content, re.MULTILINE):
-            calibrated = re.sub(r"^- Narration timing:\s*.*$", timing_line, content, flags=re.MULTILINE)
-        elif re.search(r"^- Estimated narration:\s*.*$", content, re.MULTILINE):
-            calibrated = re.sub(r"^- Estimated narration:\s*.*$", timing_line, content, flags=re.MULTILINE)
-        else:
-            calibrated = re.sub(r"(^- Target duration:\s*.*$)", r"\1\n" + timing_line, content, count=1, flags=re.MULTILINE)
-        script_path.write_text(calibrated, encoding="utf-8")
-        return cursor
-    heading_pattern = re.compile(r"^##\s+(\d{2,}:\d{2}(?:\.\d{3})?)[–-](\d{2,}:\d{2}(?:\.\d{3})?)｜(.+?)\s*$", re.MULTILINE)
-    headings = list(heading_pattern.finditer(content))
-    if len(headings) != len(parsed):
-        raise RuntimeError("Cannot recalibrate script timing: narration scene headings changed during synthesis.")
-    ranges: list[tuple[str, str]] = []
-    cursor = 0.0
-    for duration in durations:
-        start = cursor
-        cursor += duration
-        ranges.append((format_timecode(start), format_timecode(cursor)))
-    index = 0
-
-    def replace_heading(match: re.Match) -> str:
-        nonlocal index
-        start, end = ranges[index]
-        index += 1
-        return f"## {start}–{end}｜{match.group(3)}"
-
-    calibrated = heading_pattern.sub(replace_heading, content)
-    timing_line = (
-        f"- Narration timing: Calibrated from real generated voice; total {format_timecode(cursor)}; "
-        "source `assets/audio/voice/narration.wav`. Spoken text is locked."
-    )
-    if re.search(r"^- Narration timing:\s*.*$", calibrated, re.MULTILINE):
-        calibrated = re.sub(r"^- Narration timing:\s*.*$", timing_line, calibrated, flags=re.MULTILINE)
-    elif re.search(r"^- Estimated narration:\s*.*$", calibrated, re.MULTILINE):
-        calibrated = re.sub(r"^- Estimated narration:\s*.*$", timing_line, calibrated, flags=re.MULTILINE)
-    else:
-        calibrated = re.sub(r"(^- Target duration:\s*.*$)", r"\1\n" + timing_line, calibrated, count=1, flags=re.MULTILINE)
-    script_path.write_text(calibrated, encoding="utf-8")
-    return cursor
 
 
 def audio_from_response(body: bytes, content_type: str) -> bytes:
@@ -406,22 +462,24 @@ def run_ffmpeg_capture(command: list[str]) -> str:
     return result.stderr + "\n" + result.stdout
 
 
-def condition_segment(source: Path, destination: Path, overwrite: bool) -> None:
+def condition_segment(source: Path, destination: Path, overwrite: bool, profile: dict) -> None:
     if destination.exists() and not overwrite:
         return
     destination.parent.mkdir(parents=True, exist_ok=True)
     run_ffmpeg([
         ffmpeg(), "-hide_banner", "-loglevel", "error", "-y" if overwrite else "-n",
-        "-i", str(source), "-af", SCENE_CONDITIONING_FILTER,
-        "-ar", str(TARGET_SAMPLE_RATE), "-ac", str(TARGET_CHANNELS),
-        "-c:a", TARGET_CODEC, str(destination),
+        "-i", str(source), "-af", scene_conditioning_filter(profile),
+        "-ar", str(profile["voiceMaster"]["sampleRateHz"]), "-ac", str(profile["voiceMaster"]["channels"]),
+        "-c:a", profile["voiceMaster"]["codec"], str(destination),
     ])
 
 
-def loudnorm_measurement(source: Path) -> dict[str, str]:
+def loudnorm_measurement(source: Path, profile: dict) -> dict[str, str]:
     """Return the first-pass EBU R128 measurements required for a second pass."""
     measurement_filter = (
-        f"loudnorm=I={TARGET_LOUDNESS}:LRA={TARGET_LRA}:TP={TRUE_PEAK_LIMIT}:"
+        f"loudnorm=I={profile['voiceMaster']['integratedLoudnessLufs']}:"
+        f"LRA={profile['voiceMaster']['loudnessRangeLu']}:"
+        f"TP={profile['voiceMaster']['truePeakDbtp']}:"
         "print_format=json"
     )
     output = run_ffmpeg_capture([
@@ -441,17 +499,18 @@ def loudnorm_measurement(source: Path) -> dict[str, str]:
     return {key: str(stats[key]) for key in expected}
 
 
-def two_pass_loudnorm_filter(stats: dict[str, str]) -> str:
+def two_pass_loudnorm_filter(stats: dict[str, str], profile: dict) -> str:
+    voice = profile["voiceMaster"]
     return (
-        f"loudnorm=I={TARGET_LOUDNESS}:LRA={TARGET_LRA}:TP={TRUE_PEAK_LIMIT}:"
+        f"loudnorm=I={voice['integratedLoudnessLufs']}:LRA={voice['loudnessRangeLu']}:TP={voice['truePeakDbtp']}:"
         f"measured_I={stats['input_i']}:measured_LRA={stats['input_lra']}:"
         f"measured_TP={stats['input_tp']}:measured_thresh={stats['input_thresh']}:"
         f"offset={stats['target_offset']}:linear=true:print_format=summary,"
-        f"alimiter=limit={LIMITER_AMPLITUDE}:level=0"
+        f"alimiter=limit={limiter_amplitude(voice['safetyLimiterDbfs'])}:level=0"
     )
 
 
-def merge_narration(inputs: list[Path], destination: Path, overwrite: bool) -> None:
+def merge_narration(inputs: list[Path], destination: Path, overwrite: bool, profile: dict) -> None:
     if destination.exists() and not overwrite:
         raise RuntimeError(f"Merged narration exists; use --overwrite to replace it: {destination}")
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -468,14 +527,15 @@ def merge_narration(inputs: list[Path], destination: Path, overwrite: bool) -> N
         run_ffmpeg([
             ffmpeg(), "-hide_banner", "-loglevel", "error", "-y",
             "-f", "concat", "-safe", "0", "-i", str(list_file),
-            "-ar", str(TARGET_SAMPLE_RATE), "-ac", str(TARGET_CHANNELS),
-            "-c:a", TARGET_CODEC, str(concatenated),
+            "-ar", str(profile["voiceMaster"]["sampleRateHz"]), "-ac", str(profile["voiceMaster"]["channels"]),
+            "-c:a", profile["voiceMaster"]["codec"], str(concatenated),
         ])
-        stats = loudnorm_measurement(concatenated)
+        stats = loudnorm_measurement(concatenated, profile)
         run_ffmpeg([
             ffmpeg(), "-hide_banner", "-loglevel", "error", "-y" if overwrite else "-n",
-            "-i", str(concatenated), "-af", two_pass_loudnorm_filter(stats),
-            "-ar", str(TARGET_SAMPLE_RATE), "-ac", str(TARGET_CHANNELS), "-c:a", TARGET_CODEC, str(destination),
+            "-i", str(concatenated), "-af", two_pass_loudnorm_filter(stats, profile),
+            "-ar", str(profile["voiceMaster"]["sampleRateHz"]), "-ac", str(profile["voiceMaster"]["channels"]),
+            "-c:a", profile["voiceMaster"]["codec"], str(destination),
         ])
     finally:
         list_file.unlink(missing_ok=True)
@@ -490,14 +550,17 @@ def main() -> int:
     parser.add_argument("--format", choices=("mp3", "wav"), help="Override script.md format")
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--merged-output", type=Path, help="Processed, scene-ordered narration WAV path.")
-    parser.add_argument("--scene", action="append", help="Generate only one scene, for example S001. May be repeated.")
+    parser.add_argument("--scene", action="append", help="Generate a narration sample with --scene MASTER.")
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument("--revise-narration", action="store_true", help="After renewed content approval, archive the prior voice revision and synthesize the revised script.")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
     script_path = args.script.resolve()
     script_text = script_path.read_text(encoding="utf-8")
-    is_v6_script = bool(re.search(r"^templateVersion:\s*6\s*$", script_text, re.MULTILINE))
+    if not re.search(r"^templateVersion:\s*6\s*$", script_text, re.MULTILINE):
+        raise SystemExit("Only templateVersion 6 scripts are supported.")
+    audio_profile, audio_spec = load_audio_profile(script_path)
     all_scenes = scenes(script_text)
     tts_config = tts_configuration(script_text, args.speaker, args.format)
     parsed = all_scenes
@@ -512,25 +575,51 @@ def main() -> int:
     processed_dir = voice_root / "processed"
     merged_default = voice_root / ("narration.wav" if not args.scene else "preview-" + "-".join(scene["id"].lower() for scene in parsed) + ".wav")
     merged = (args.merged_output or merged_default).resolve()
-    if is_v6_script:
-        for location in (output_dir, merged):
-            if not location.is_relative_to(script_path.parent):
-                raise SystemExit("v6 voice outputs must stay inside the production directory for portable archives.")
+    manifest_file = voice_root / (
+        "manifest.json" if not args.scene else "preview-manifest-" + "-".join(scene["id"].lower() for scene in parsed) + ".json"
+    )
+    lock_file = voice_root / NARRATION_LOCK_FILE
+    if args.revise_narration:
+        if args.scene or args.output_dir or args.merged_output or args.overwrite:
+            raise RuntimeError("Narration revision requires a full run with the standard voice paths and no --overwrite.")
+        if not lock_file.is_file():
+            raise RuntimeError("No existing narration lock to revise; run normal voice generation instead.")
+        require_revised_content_approval(script_path)
+        if json.loads(lock_file.read_text(encoding="utf-8")).get("digest") == narration_digest(all_scenes):
+            raise RuntimeError("Narration has not changed; a revision is unnecessary.")
+    audio_spec_hash = hashlib.sha256(audio_spec.read_bytes()).hexdigest()
+    previous_profile = None
+    previous_spec_hash = None
+    if manifest_file.is_file():
+        try:
+            previous_manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+            if not isinstance(previous_manifest, dict):
+                raise RuntimeError(f"Existing voice manifest must be an object: {manifest_file}")
+            previous_profile = previous_manifest.get("audioProfile")
+            previous_source = previous_manifest.get("audioProfileSource")
+            previous_spec_hash = previous_source.get("sha256") if isinstance(previous_source, dict) else None
+        except json.JSONDecodeError as error:
+            raise RuntimeError(f"Existing voice manifest is invalid: {manifest_file}") from error
+    processing_changed = manifest_file.is_file() and (previous_profile != audio_profile or previous_spec_hash != audio_spec_hash)
+    for location in (output_dir, merged):
+        if not location.is_relative_to(script_path.parent):
+            raise SystemExit("Voice outputs must stay inside the production directory for portable archives.")
 
     def manifest_path(location: Path) -> str:
-        return str(location.relative_to(script_path.parent)) if is_v6_script else str(location)
+        return str(location.relative_to(script_path.parent))
 
     print(f"Found {len(parsed)} narration scene(s); speaker={tts_config['speaker']}, format={tts_config['format']}, sample_rate={tts_config['sample_rate']}.")
     if args.dry_run:
+        if args.revise_narration:
+            print("- Revised narration is content-approved; the prior voice assets will be archived on the full run.")
         for scene in parsed:
             print(f"- {scene['id']}: {scene['title']}")
         return 0
     key = secret_key(script_path)
+    revision = archive_voice_revision(voice_root) if args.revise_narration else None
     output_dir.mkdir(parents=True, exist_ok=True)
-    # This happens before the first network request. From this point forward a
-    # rerun may adjust measured timings, but it must never synthesize a revised
-    # spoken manuscript under the same production.
-    lock_file = voice_root / NARRATION_LOCK_FILE
+    # Lock the active manuscript before the first network request. A later
+    # user-authorized revision archives the previous lock and voice assets.
     lock = ensure_narration_lock(lock_file, all_scenes)
     manifest = []
     processed_paths: list[Path] = []
@@ -544,10 +633,10 @@ def main() -> int:
             generated = True
             print(f"[ok] {scene['id']}: {output}")
         processed = processed_dir / f"{scene['number']:02d}-{scene['id'].lower()}.wav"
-        condition_segment(output, processed, overwrite=args.overwrite or generated)
+        condition_segment(output, processed, overwrite=args.overwrite or generated or processing_changed, profile=audio_profile)
         processed_paths.append(processed)
         manifest.append({"sceneId": scene["id"], "rawFile": manifest_path(output), "processedFile": manifest_path(processed), "speaker": tts_config["speaker"], "sourceText": scene["text"], "synthesis": {key: scene[key] for key in ("speech_rate", "loudness_rate", "silence_duration_ms", "post_process_pitch", "section_id")}})
-    merge_narration(processed_paths, merged, overwrite=args.overwrite)
+    merge_narration(processed_paths, merged, overwrite=args.overwrite or processing_changed, profile=audio_profile)
     scene_durations = [wav_duration_seconds(item) for item in processed_paths]
     timing = []
     cursor = 0.0
@@ -559,50 +648,50 @@ def main() -> int:
             "durationSeconds": duration,
         })
         cursor += duration
-    # A partial sample cannot define the full production timeline. v6 keeps
-    # measured timing in the voice manifest so synthesis cannot change a
-    # content-approved script. Older scene-based scripts retain their heading
-    # calibration for compatibility.
-    calibrated_script = False
-    calibrated_duration = None
-    if not args.scene and not is_v6_script:
-        calibrated_duration = recalibrate_script_timing(script_path, all_scenes, scene_durations)
-        calibrated_script = True
-    elif not args.scene:
-        calibrated_duration = cursor
-    manifest_file = voice_root / (
-        "manifest.json" if not args.scene else "preview-manifest-" + "-".join(scene["id"].lower() for scene in parsed) + ".json"
-    )
+    # A sample cannot define the full production timeline. Keep measured
+    # timing in the manifest without modifying the approved script.
+    calibrated_duration = cursor if not args.scene else None
+    voice_profile = audio_profile["voiceMaster"]
+    final_mix = audio_profile["finalMix"]
     manifest_file.write_text(json.dumps({
         "provider": "volcengine-seed-tts-2.0",
         "ttsRequest": tts_config,
+        "audioProfileSource": {
+            "path": os.path.relpath(audio_spec, script_path.parent),
+            "sha256": audio_spec_hash,
+        },
+        "audioProfile": audio_profile,
         "processing": {
-            "sceneConditioning": "75 Hz high-pass, gentle de-essing, 2.5:1 compression, -1.5 dB safety limiting",
-            "mastering": "two-pass EBU R128 loudness normalization after scene-ordered merge",
+            "sceneConditioning": f"{voice_profile['highPassHz']} Hz high-pass, gentle de-essing, {voice_profile['compressionRatio']}:1 compression, {voice_profile['safetyLimiterDbfs']} dB safety limiting",
+            "mastering": "two-pass EBU R128 loudness normalization",
         },
         "voiceMaster": {
-            "integratedLoudness": "-16 LUFS",
-            "loudnessRange": "6 LU",
-            "truePeakLimit": "-1.5 dBTP",
-            "sampleRateHz": TARGET_SAMPLE_RATE,
-            "channels": TARGET_CHANNELS,
-            "codec": "PCM 24-bit WAV",
+            "integratedLoudness": f"{voice_profile['integratedLoudnessLufs']} LUFS",
+            "loudnessRange": f"{voice_profile['loudnessRangeLu']} LU",
+            "truePeakLimit": f"{voice_profile['truePeakDbtp']} dBTP",
+            "sampleRateHz": voice_profile["sampleRateHz"],
+            "channels": voice_profile["channels"],
+            "codec": voice_profile["codec"],
         },
-        "finalVideoMixTarget": {"integratedLoudness": "-14 LUFS", "truePeakLimit": "-1.0 dBTP", "sampleRateHz": 48000, "channels": 2},
-        "pathBase": "production" if is_v6_script else "absolute",
+        "finalVideoMixTarget": {
+            "integratedLoudness": f"{final_mix['integratedLoudnessLufs']} LUFS",
+            "truePeakLimit": f"{final_mix['truePeakDbtp']} dBTP",
+            "sampleRateHz": final_mix["sampleRateHz"],
+            "channels": final_mix["channels"],
+        },
+        "pathBase": "production",
         "mergedFile": manifest_path(merged),
         "narrationLock": {"file": NARRATION_LOCK_FILE, "digest": lock["digest"]},
+        "narrationRevision": revision or (previous_manifest.get("narrationRevision", "R000") if manifest_file.is_file() else "R000"),
         "timing": {
             "source": "processed scene WAV durations",
-            "scriptCalibrated": calibrated_script,
+            "scriptCalibrated": False,
             "totalSeconds": calibrated_duration if calibrated_duration is not None else cursor,
             "scenes": timing,
         },
         "scenes": manifest,
     }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    if calibrated_script:
-        print(f"[ok] recalibrated script timecodes from real generated voice -> {format_timecode(calibrated_duration)}")
-    elif not args.scene:
+    if not args.scene:
         print(f"[ok] recorded measured narration timing in manifest without changing approved script -> {format_timecode(calibrated_duration)}")
     elif args.scene:
         print(f"[ok] sample did not recalibrate the full timeline; sample timing -> {manifest_file}")
